@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import StudySession from './pages/StudySession';
+import SessionDetail from './pages/SessionDetail';
 import User from './pages/User';
 
 // Auth Context
@@ -91,6 +92,7 @@ function App() {
             <Route path="/signup" element={<Signup />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/study-session" element={<StudySession />} />
+            <Route path="/study-session/:id" element={<SessionDetail />} />
             <Route path="/user" element={<User />} />
           </Routes>
         </main>

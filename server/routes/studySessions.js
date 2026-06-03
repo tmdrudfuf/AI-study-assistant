@@ -52,4 +52,99 @@ router.post('/', async (req, res) => {
   }
 });
 
+// 특정 세션 조회
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to load session' });
+  }
+});
+
+// 세션 수정
+router.put('/:id', async (req, res) => {
+  const { id } = req.params;
+  const { title, original_text, summary } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE study_sessions 
+       SET title = COALESCE($1, title), 
+           original_text = COALESCE($2, original_text),
+           summary = COALESCE($3, summary)
+       WHERE id = $4 AND user_id = $5
+       RETURNING *`,
+      [title || null, original_text || null, summary || null, id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to update session' });
+  }
+});
+
+// 세션 삭제
+router.delete('/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await db.query(
+      'DELETE FROM study_sessions WHERE id = $1 AND user_id = $2 RETURNING id',
+      [id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+    res.json({ message: 'Session deleted successfully', id: result.rows[0].id });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to delete session' });
+  }
+});
+
+// AI 요약 생성 (간단한 버전)
+router.post('/:id/summarize', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const session = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (session.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const text = session.rows[0].original_text;
+    
+    // 간단한 요약: 첫 문장 + 단어 수 통계
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+    const firstSentence = sentences[0]?.trim() || '';
+    const wordCount = text.split(/\s+/).length;
+    const charCount = text.length;
+    
+    const summary = `📌 원문 통계:\n- 단어 수: ${wordCount}개\n- 문자 수: ${charCount}개\n- 문장 수: ${sentences.length}개\n\n📝 첫 문장:\n${firstSentence}`;
+
+    // DB에 요약 저장
+    const updated = await db.query(
+      'UPDATE study_sessions SET summary = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [summary, id, req.user.userId]
+    );
+
+    res.json({ summary, session: updated.rows[0] });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Failed to generate summary' });
+  }
+});
+
 module.exports = router;
