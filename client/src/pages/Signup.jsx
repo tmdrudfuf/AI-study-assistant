@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../App';
 
 export default function Signup() {
   const [name, setName] = useState('');
@@ -6,6 +8,8 @@ export default function Signup() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
+  const navigate = useNavigate();
+  const { setUser, setToken } = useAuth();
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -27,10 +31,16 @@ export default function Signup() {
         return;
       }
 
-      setMessage('Signup successful! You can now log in.');
-      setName('');
-      setEmail('');
-      setPassword('');
+      // 토큰과 사용자 정보 저장
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      setToken(data.token);
+      setUser(data.user);
+
+      setMessage('Signup successful! Redirecting to dashboard...');
+      setTimeout(() => {
+        navigate('/dashboard');
+      }, 1000);
     } catch (err) {
       setError('서버 연결에 실패했습니다.');
     }
