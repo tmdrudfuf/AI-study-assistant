@@ -1,0 +1,14 @@
+{
+  "name": "ai-study-assistant",
+  "private": true,
+  "workspaces": [
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace client",
+    "server": "npm run dev --workspace server",
+    "install-all": "npm install",
+    "build": "npm run build --workspace client"
+  }
+}
