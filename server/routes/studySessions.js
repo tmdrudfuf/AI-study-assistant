@@ -1,5 +1,6 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const OpenAI = require('openai');
 const db = require('../db');
 
 const router = express.Router();
@@ -112,7 +113,25 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
-// AI 요약 생성 (간단한 버전)
+function getOpenAIClient() {
+  const apiKey = process.env.OPENAI_API_KEY;
+  const isPlaceholder =
+    apiKey &&
+    (apiKey.includes('your_openai_api_key_here') ||
+      apiKey.includes('OpenAI_API_KEY') ||
+      apiKey.includes('실제') ||
+      apiKey.includes('ë„ˆ'));
+
+  if (!apiKey || isPlaceholder) {
+    throw new Error('OPENAI_API_KEY is not configured. Set OPENAI_API_KEY in server/.env.');
+  }
+
+  return new OpenAI({
+    apiKey,
+  });
+}
+
+// AI 요약 생성
 router.post('/:id/summarize', async (req, res) => {
   const { id } = req.params;
   try {
@@ -125,14 +144,32 @@ router.post('/:id/summarize', async (req, res) => {
     }
 
     const text = session.rows[0].original_text;
-    
-    // 간단한 요약: 첫 문장 + 단어 수 통계
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
-    const firstSentence = sentences[0]?.trim() || '';
-    const wordCount = text.split(/\s+/).length;
-    const charCount = text.length;
-    
-    const summary = `📌 원문 통계:\n- 단어 수: ${wordCount}개\n- 문자 수: ${charCount}개\n- 문장 수: ${sentences.length}개\n\n📝 첫 문장:\n${firstSentence}`;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Original text is required to generate a summary' });
+    }
+
+    const openai = getOpenAIClient();
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_MODEL || 'gpt-5.2',
+      instructions:
+        'You are an AI study assistant. Summarize study material clearly in Korean. Focus on accurate concepts, learning value, and review usefulness.',
+      input: `Summarize the following study material in Korean.
+
+Use this structure:
+1. Core summary: 4-6 bullet points
+2. Important concepts: terms with short explanations
+3. Review questions: 3 questions
+4. One-sentence takeaway
+
+Study material:
+${text}`,
+    });
+
+    const summary = response.output_text?.trim();
+    if (!summary) {
+      throw new Error('OpenAI returned an empty summary');
+    }
 
     // DB에 요약 저장
     const updated = await db.query(
@@ -142,8 +179,11 @@ router.post('/:id/summarize', async (req, res) => {
 
     res.json({ summary, session: updated.rows[0] });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Failed to generate summary' });
+    console.error('Failed to generate summary:', error);
+    res.status(500).json({
+      error: 'Failed to generate summary',
+      detail: error.message || 'Unknown error',
+    });
   }
 });
 
