@@ -15,6 +15,8 @@ export default function SessionDetail() {
   const [editText, setEditText] = useState('');
   const [savingChanges, setSavingChanges] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
+  const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [selectedAnswers, setSelectedAnswers] = useState({});
 
   useEffect(() => {
     if (!token) {
@@ -88,14 +90,16 @@ export default function SessionDetail() {
     }
   };
 
-  const handleGenerateSummary = async () => {
+  const handleGenerateSummary = async (language) => {
     setGeneratingSummary(true);
     try {
       const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/summarize`, {
         method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
         },
+        body: JSON.stringify({ language }),
       });
 
       const data = await response.json();
@@ -111,6 +115,35 @@ export default function SessionDetail() {
       setError(`❌ 오류: ${err.message}`);
     } finally {
       setGeneratingSummary(false);
+    }
+  };
+
+  const handleGenerateQuiz = async (language) => {
+    setGeneratingQuiz(true);
+    try {
+      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/quiz`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ language }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || '퀴즈 생성에 실패했습니다.');
+      }
+
+      setSession(data.session);
+      setSelectedAnswers({});
+      setError('');
+      alert('✅ 퀴즈가 생성되었습니다.');
+    } catch (err) {
+      setError(`❌ 오류: ${err.message}`);
+    } finally {
+      setGeneratingQuiz(false);
     }
   };
 
@@ -153,6 +186,14 @@ export default function SessionDetail() {
       return dateString;
     }
   };
+
+  const quizQuestions = session?.quiz_json?.questions || [];
+  const answeredCount = quizQuestions.filter((_, index) => selectedAnswers[index] !== undefined).length;
+  const correctCount = quizQuestions.filter(
+    (item, index) => selectedAnswers[index] !== undefined && selectedAnswers[index] === item.answerIndex
+  ).length;
+  const incorrectCount = answeredCount - correctCount;
+  const unansweredCount = quizQuestions.length - answeredCount;
 
   if (loading) return <section className="page-card"><p>로딩 중...</p></section>;
 
@@ -211,7 +252,7 @@ export default function SessionDetail() {
               ✏️ 수정
             </button>
             <button
-              onClick={handleGenerateSummary}
+              onClick={() => handleGenerateSummary('ko')}
               disabled={generatingSummary}
               style={{
                 padding: '10px 20px',
@@ -223,7 +264,52 @@ export default function SessionDetail() {
                 opacity: generatingSummary ? 0.7 : 1,
               }}
             >
-              {generatingSummary ? '생성 중...' : '✨ 요약 생성'}
+              {generatingSummary ? '생성 중...' : '✨ 요약 생성 (한글)'}
+            </button>
+            <button
+              onClick={() => handleGenerateSummary('en')}
+              disabled={generatingSummary}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#0f766e',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                opacity: generatingSummary ? 0.7 : 1,
+              }}
+            >
+              {generatingSummary ? 'Generating...' : '✨ Summary (English)'}
+            </button>
+            <button
+              onClick={() => handleGenerateQuiz('ko')}
+              disabled={generatingQuiz}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#7c3aed',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                opacity: generatingQuiz ? 0.7 : 1,
+              }}
+            >
+              {generatingQuiz ? '생성 중...' : '🧠 퀴즈 생성 (한글)'}
+            </button>
+            <button
+              onClick={() => handleGenerateQuiz('en')}
+              disabled={generatingQuiz}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#9333ea',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                opacity: generatingQuiz ? 0.7 : 1,
+              }}
+            >
+              {generatingQuiz ? 'Generating...' : '🧠 Quiz (English)'}
             </button>
             <button
               onClick={handleDeleteSession}
@@ -309,21 +395,156 @@ export default function SessionDetail() {
         )}
       </div>
 
-      {session.summary && (
+      {(session.summary_ko || session.summary_en || session.summary) && (
         <div style={{ marginBottom: '30px' }}>
           <h3 style={{ marginBottom: '10px' }}>✨ 요약</h3>
+          <div style={{ display: 'grid', gap: '15px' }}>
+            {(session.summary_ko || (!session.summary_en && session.summary)) && (
+              <div
+                style={{
+                  backgroundColor: '#f0f9ff',
+                  padding: '15px',
+                  borderRadius: '4px',
+                  border: '1px solid #7dd3fc',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                <h4 style={{ marginTop: 0 }}>한국어 요약</h4>
+                {session.summary_ko || session.summary}
+              </div>
+            )}
+            {session.summary_en && (
+              <div
+                style={{
+                  backgroundColor: '#f0fdf4',
+                  padding: '15px',
+                  borderRadius: '4px',
+                  border: '1px solid #86efac',
+                  lineHeight: '1.6',
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                }}
+              >
+                <h4 style={{ marginTop: 0 }}>English Summary</h4>
+                {session.summary_en}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {quizQuestions.length > 0 && (
+        <div style={{ marginBottom: '30px' }}>
+          <h3 style={{ marginBottom: '10px' }}>🧠 퀴즈</h3>
+          <div style={{ marginBottom: '15px' }}>
+            <button
+              onClick={() => setSelectedAnswers({})}
+              style={{
+                padding: '8px 14px',
+                backgroundColor: '#f3f4f6',
+                color: '#374151',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                cursor: 'pointer',
+              }}
+            >
+              다시 풀기
+            </button>
+          </div>
+          <div style={{ display: 'grid', gap: '15px' }}>
+            {quizQuestions.map((item, questionIndex) => (
+              <div
+                key={`${item.question}-${questionIndex}`}
+                style={{
+                  backgroundColor: '#faf5ff',
+                  padding: '15px',
+                  borderRadius: '4px',
+                  border: '1px solid #d8b4fe',
+                }}
+              >
+                <p style={{ fontWeight: 'bold', marginTop: 0 }}>
+                  {questionIndex + 1}. {item.question}
+                </p>
+                <div style={{ display: 'grid', gap: '8px', marginBottom: '10px' }}>
+                  {item.choices?.map((choice, choiceIndex) => (
+                    <button
+                      key={`${choice}-${choiceIndex}`}
+                      type="button"
+                      onClick={() =>
+                        setSelectedAnswers((answers) => ({
+                          ...answers,
+                          [questionIndex]: choiceIndex,
+                        }))
+                      }
+                      style={{
+                        padding: '10px',
+                        textAlign: 'left',
+                        backgroundColor:
+                          selectedAnswers[questionIndex] === choiceIndex
+                            ? choiceIndex === item.answerIndex
+                              ? '#dcfce7'
+                              : '#fee2e2'
+                            : 'white',
+                        color: '#374151',
+                        border:
+                          selectedAnswers[questionIndex] === choiceIndex
+                            ? choiceIndex === item.answerIndex
+                              ? '2px solid #16a34a'
+                              : '2px solid #dc2626'
+                            : '1px solid #d1d5db',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: selectedAnswers[questionIndex] === choiceIndex ? 'bold' : 'normal',
+                      }}
+                    >
+                      {String.fromCharCode(65 + choiceIndex)}. {choice}
+                    </button>
+                  ))}
+                </div>
+                {selectedAnswers[questionIndex] !== undefined && (
+                  <div
+                    style={{
+                      padding: '10px',
+                      borderRadius: '4px',
+                      backgroundColor:
+                        selectedAnswers[questionIndex] === item.answerIndex ? '#f0fdf4' : '#fef2f2',
+                      color: selectedAnswers[questionIndex] === item.answerIndex ? '#166534' : '#991b1b',
+                    }}
+                  >
+                    <strong>
+                      {selectedAnswers[questionIndex] === item.answerIndex ? '정답입니다!' : '오답입니다.'}
+                    </strong>
+                    <p style={{ margin: '6px 0 0 0' }}>
+                      정답: {String.fromCharCode(65 + item.answerIndex)} - {item.explanation}
+                    </p>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
           <div
             style={{
-              backgroundColor: '#f0f9ff',
+              marginTop: '20px',
               padding: '15px',
+              backgroundColor: '#f9fafb',
+              border: '1px solid #d1d5db',
               borderRadius: '4px',
-              border: '1px solid #7dd3fc',
-              lineHeight: '1.6',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
+              display: 'grid',
+              gap: '8px',
             }}
           >
-            {session.summary}
+            <h4 style={{ margin: 0 }}>퀴즈 결과</h4>
+            <p style={{ margin: 0 }}>
+              맞은 개수: <strong style={{ color: '#15803d' }}>{correctCount}</strong> / {quizQuestions.length}
+            </p>
+            <p style={{ margin: 0 }}>
+              틀린 개수: <strong style={{ color: '#dc2626' }}>{incorrectCount}</strong>
+            </p>
+            <p style={{ margin: 0 }}>
+              아직 안 푼 문제: <strong>{unansweredCount}</strong>
+            </p>
           </div>
         </div>
       )}

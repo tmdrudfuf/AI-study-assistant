@@ -131,9 +131,47 @@ function getOpenAIClient() {
   });
 }
 
+function parseModelJson(text) {
+  const cleaned = text
+    .trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/i, '')
+    .trim();
+
+  return JSON.parse(cleaned);
+}
+
+function shuffleChoices(question) {
+  const choices = Array.isArray(question.choices) ? question.choices : [];
+  const answer = choices[question.answerIndex];
+
+  if (choices.length !== 4 || answer === undefined) {
+    return question;
+  }
+
+  const shuffled = choices.map((choice, index) => ({
+    choice,
+    isAnswer: index === question.answerIndex,
+  }));
+
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const randomIndex = Math.floor(Math.random() * (index + 1));
+    [shuffled[index], shuffled[randomIndex]] = [shuffled[randomIndex], shuffled[index]];
+  }
+
+  return {
+    ...question,
+    choices: shuffled.map((item) => item.choice),
+    answerIndex: shuffled.findIndex((item) => item.isAnswer),
+  };
+}
+
 // AI 요약 생성
 router.post('/:id/summarize', async (req, res) => {
   const { id } = req.params;
+  const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
+  const language = languageCode === 'en' ? 'English' : 'Korean';
   try {
     const session = await db.query(
       'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
@@ -153,8 +191,8 @@ router.post('/:id/summarize', async (req, res) => {
     const response = await openai.responses.create({
       model: process.env.OPENAI_MODEL || 'gpt-5.2',
       instructions:
-        'You are an AI study assistant. Summarize study material clearly in Korean. Focus on accurate concepts, learning value, and review usefulness.',
-      input: `Summarize the following study material in Korean.
+        `You are an AI study assistant. Summarize study material clearly in ${language}. Focus on accurate concepts, learning value, and review usefulness.`,
+      input: `Summarize the following study material in ${language}.
 
 Use this structure:
 1. Core summary: 4-6 bullet points
@@ -171,9 +209,10 @@ ${text}`,
       throw new Error('OpenAI returned an empty summary');
     }
 
-    // DB에 요약 저장
+    // DB에 언어별 요약 저장
+    const summaryColumn = languageCode === 'en' ? 'summary_en' : 'summary_ko';
     const updated = await db.query(
-      'UPDATE study_sessions SET summary = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      `UPDATE study_sessions SET ${summaryColumn} = $1, summary = $1 WHERE id = $2 AND user_id = $3 RETURNING *`,
       [summary, id, req.user.userId]
     );
 
@@ -182,6 +221,81 @@ ${text}`,
     console.error('Failed to generate summary:', error);
     res.status(500).json({
       error: 'Failed to generate summary',
+      detail: error.message || 'Unknown error',
+    });
+  }
+});
+
+// AI 퀴즈 생성
+router.post('/:id/quiz', async (req, res) => {
+  const { id } = req.params;
+  const language = req.body?.language === 'en' ? 'English' : 'Korean';
+  try {
+    const session = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (session.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const text = session.rows[0].original_text;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Original text is required to generate a quiz' });
+    }
+
+    const openai = getOpenAIClient();
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_MODEL || 'gpt-5.2',
+      instructions:
+        `You are an AI study assistant. Create accurate review quizzes in ${language} from study material. Return only valid JSON with no markdown.`,
+      input: `Create a study quiz in ${language} from the following material.
+
+Return only JSON in this exact shape:
+{
+  "questions": [
+    {
+      "question": "Question text in ${language}",
+      "choices": ["A", "B", "C", "D"],
+      "answerIndex": 0,
+      "explanation": "Short explanation in ${language}"
+    }
+  ]
+}
+
+Rules:
+- Create 5 multiple-choice questions.
+- Each question must have exactly 4 choices.
+- answerIndex must be 0, 1, 2, or 3.
+- Focus on important concepts, not tiny details.
+
+Study material:
+${text}`,
+    });
+
+    const output = response.output_text?.trim();
+    if (!output) {
+      throw new Error('OpenAI returned an empty quiz');
+    }
+
+    const quiz = parseModelJson(output);
+    if (!Array.isArray(quiz.questions) || quiz.questions.length === 0) {
+      throw new Error('OpenAI returned an invalid quiz format');
+    }
+
+    quiz.questions = quiz.questions.map(shuffleChoices);
+
+    const updated = await db.query(
+      'UPDATE study_sessions SET quiz_json = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [JSON.stringify(quiz), id, req.user.userId]
+    );
+
+    res.json({ quiz, session: updated.rows[0] });
+  } catch (error) {
+    console.error('Failed to generate quiz:', error);
+    res.status(500).json({
+      error: 'Failed to generate quiz',
       detail: error.message || 'Unknown error',
     });
   }
