@@ -63,7 +63,12 @@ export default function Dashboard() {
 
   const hasSummary = (session) => Boolean(session.summary_ko || session.summary_en || session.summary);
 
-  const hasQuiz = (session) => Boolean(session.quiz_json?.questions?.length);
+  const hasQuiz = (session) =>
+    Boolean(
+      session.quiz_json?.questions?.length ||
+        session.quiz_json?.ko?.questions?.length ||
+        session.quiz_json?.en?.questions?.length
+    );
 
   const hasFlashcards = (session) => {
     const koreanCards = session.flashcards_json?.ko?.cards || [];

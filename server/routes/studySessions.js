@@ -180,6 +180,20 @@ function getFlashcardsByLanguage(session, languageCode) {
   };
 }
 
+function getQuizzesByLanguage(session, languageCode) {
+  const existingQuiz = session.quiz_json || {};
+  const quizzes = existingQuiz.questions ? { ko: existingQuiz } : existingQuiz;
+  const languageQuiz = quizzes[languageCode] || { questions: [] };
+
+  return {
+    ...quizzes,
+    [languageCode]: {
+      ...languageQuiz,
+      questions: Array.isArray(languageQuiz.questions) ? languageQuiz.questions : [],
+    },
+  };
+}
+
 // AI 요약 생성
 router.post('/:id/summarize', async (req, res) => {
   const { id } = req.params;
@@ -242,7 +256,8 @@ ${text}`,
 // AI 퀴즈 생성
 router.post('/:id/quiz', async (req, res) => {
   const { id } = req.params;
-  const language = req.body?.language === 'en' ? 'English' : 'Korean';
+  const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
+  const language = languageCode === 'en' ? 'English' : 'Korean';
   try {
     const session = await db.query(
       'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
@@ -252,7 +267,8 @@ router.post('/:id/quiz', async (req, res) => {
       return res.status(404).json({ error: 'Session not found' });
     }
 
-    const text = session.rows[0].original_text;
+    const currentSession = session.rows[0];
+    const text = currentSession.original_text;
 
     if (!text || !text.trim()) {
       return res.status(400).json({ error: 'Original text is required to generate a quiz' });
@@ -298,13 +314,17 @@ ${text}`,
     }
 
     quiz.questions = quiz.questions.map(shuffleChoices);
+    const quizzes = {
+      ...getQuizzesByLanguage(currentSession, languageCode),
+      [languageCode]: quiz,
+    };
 
     const updated = await db.query(
       'UPDATE study_sessions SET quiz_json = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
-      [JSON.stringify(quiz), id, req.user.userId]
+      [JSON.stringify(quizzes), id, req.user.userId]
     );
 
-    res.json({ quiz, session: updated.rows[0] });
+    res.json({ quiz, quizzes, session: updated.rows[0] });
   } catch (error) {
     console.error('Failed to generate quiz:', error);
     res.status(500).json({

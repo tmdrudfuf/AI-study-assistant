@@ -18,6 +18,7 @@ export default function SessionDetail() {
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [quizLanguage, setQuizLanguage] = useState('ko');
   const [flippedFlashcards, setFlippedFlashcards] = useState({});
   const [activeTab, setActiveTab] = useState('text');
   const [flashcardMode, setFlashcardMode] = useState('study');
@@ -152,6 +153,7 @@ export default function SessionDetail() {
       setSession(data.session);
       setSelectedAnswers({});
       setActiveTab('quiz');
+      setQuizLanguage(language);
       setError('');
       alert('✅ 퀴즈가 생성되었습니다.');
     } catch (err) {
@@ -336,7 +338,10 @@ export default function SessionDetail() {
     }
   };
 
-  const quizQuestions = session?.quiz_json?.questions || [];
+  const legacyQuizQuestions = session?.quiz_json?.questions || [];
+  const quizQuestionsKo = session?.quiz_json?.ko?.questions || legacyQuizQuestions;
+  const quizQuestionsEn = session?.quiz_json?.en?.questions || [];
+  const quizQuestions = quizLanguage === 'en' ? quizQuestionsEn : quizQuestionsKo;
   const answeredCount = quizQuestions.filter((_, index) => selectedAnswers[index] !== undefined).length;
   const correctCount = quizQuestions.filter(
     (item, index) => selectedAnswers[index] !== undefined && selectedAnswers[index] === item.answerIndex
@@ -375,6 +380,11 @@ export default function SessionDetail() {
     if (!activeFlashcards.length) return;
     setCurrentFlashcardIndex((index) => (index + 1) % activeFlashcards.length);
     setStudyCardFlipped(false);
+  };
+
+  const handleQuizLanguageChange = (language) => {
+    setQuizLanguage(language);
+    setSelectedAnswers({});
   };
 
   const renderFlashcardSection = (language, title, cards) => (
@@ -733,9 +743,29 @@ export default function SessionDetail() {
 
       {activeTab === 'quiz' && (
       <div style={{ marginBottom: '30px' }}>
+        <div className="quiz-toolbar">
+          <div>
+            <h3>Quiz</h3>
+            <p className="subtle-text">Choose a language and answer the questions.</p>
+          </div>
+          <div className="segmented-control">
+            <button
+              className={quizLanguage === 'ko' ? 'segment-button segment-button-active' : 'segment-button'}
+              onClick={() => handleQuizLanguageChange('ko')}
+            >
+              Korean
+            </button>
+            <button
+              className={quizLanguage === 'en' ? 'segment-button segment-button-active' : 'segment-button'}
+              onClick={() => handleQuizLanguageChange('en')}
+            >
+              English
+            </button>
+          </div>
+        </div>
+
         {quizQuestions.length > 0 ? (
         <div style={{ marginBottom: '30px' }}>
-          <h3 style={{ marginBottom: '10px' }}>🧠 퀴즈</h3>
           <div style={{ marginBottom: '15px' }}>
             <button
               onClick={() => setSelectedAnswers({})}
@@ -848,7 +878,7 @@ export default function SessionDetail() {
         ) : (
           <div className="empty-state">
             <h3>Quiz</h3>
-            <p>No quiz yet. Use the AI Tools panel to generate a Korean or English quiz.</p>
+            <p>No {quizLanguage === 'en' ? 'English' : 'Korean'} quiz yet. Use the AI Tools panel to generate one.</p>
           </div>
         )}
       </div>
