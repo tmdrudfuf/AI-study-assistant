@@ -7,21 +7,24 @@ export default function StudySession() {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const navigate = useNavigate();
 
-  // 로그인 확인
   useEffect(() => {
     if (!token) {
       navigate('/login');
     }
   }, [token, navigate]);
 
-  const handleSaveSession = async (e) => {
-    e.preventDefault();
+  const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+  const charCount = text.length;
+  const canSave = title.trim() && text.trim() && !loading;
 
-    if (!title.trim() || !text.trim()) {
-      setMessage('제목과 텍스트를 입력해주세요.');
+  const handleSaveSession = async (event) => {
+    event.preventDefault();
+
+    if (!canSave) {
+      setMessage('Please add both a title and original text.');
       return;
     }
 
@@ -44,17 +47,12 @@ export default function StudySession() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || '세션 저장에 실패했습니다.');
+        throw new Error(data.message || data.error || 'Failed to save study session.');
       }
 
-      setMessage(`✅ 세션 저장 완료! (ID: ${data.id})`);
-      setTitle('');
-      setText('');
-
-      // 3초 후 메시지 제거
-      setTimeout(() => setMessage(''), 3000);
+      navigate(`/study-session/${data.id}`);
     } catch (error) {
-      setMessage(`❌ 오류: ${error.message}`);
+      setMessage(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -62,30 +60,58 @@ export default function StudySession() {
 
   return (
     <section className="page-card">
-      <h1>Study Session</h1>
-      {message && <p style={{ color: message.includes('✅') ? 'green' : 'red' }}>{message}</p>}
-      <form onSubmit={handleSaveSession}>
-        <div className="form-group">
-          <label>Title</label>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            type="text"
-            placeholder="세션 제목 입력..."
-          />
+      <div className="create-session-header">
+        <div>
+          <h1>New Study Session</h1>
+          <p>Add your source material first. You can generate summaries, quizzes, and flashcards after saving.</p>
         </div>
-        <div className="form-group">
-          <label>Original Text</label>
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            rows="8"
-            placeholder="공부할 텍스트 입력..."
-          />
+      </div>
+
+      {message && <p style={{ color: 'red' }}>{message}</p>}
+
+      <form className="create-session-layout" onSubmit={handleSaveSession}>
+        <div className="create-session-main">
+          <div className="form-group">
+            <label>Title</label>
+            <input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              type="text"
+              placeholder="Example: The Water Cycle"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Original Text</label>
+            <textarea
+              className="source-textarea"
+              value={text}
+              onChange={(event) => setText(event.target.value)}
+              rows="16"
+              placeholder="Paste the notes, article, textbook section, or lecture material you want to study..."
+            />
+          </div>
+
+          <button className="btn btn-primary" type="submit" disabled={!canSave}>
+            {loading ? 'Saving...' : 'Save and Continue'}
+          </button>
         </div>
-        <button type="submit" disabled={loading}>
-          {loading ? '저장 중...' : 'Save Session'}
-        </button>
+
+        <aside className="create-session-sidebar">
+          <h3>Source Stats</h3>
+          <div className="source-stat">
+            <span>Words</span>
+            <strong>{wordCount}</strong>
+          </div>
+          <div className="source-stat">
+            <span>Characters</span>
+            <strong>{charCount}</strong>
+          </div>
+          <div className="source-tip">
+            <h4>After saving</h4>
+            <p>Open the saved session to create Korean or English summaries, quizzes, and flashcards.</p>
+          </div>
+        </aside>
       </form>
     </section>
   );

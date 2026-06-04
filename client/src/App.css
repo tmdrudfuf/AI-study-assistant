@@ -267,6 +267,75 @@ main {
   color: #2563eb;
 }
 
+.create-session-header h1 {
+  margin: 0 0 6px;
+}
+
+.create-session-header p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.create-session-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+  align-items: start;
+}
+
+.create-session-main {
+  display: grid;
+  gap: 16px;
+}
+
+.source-textarea {
+  min-height: 340px;
+  line-height: 1.6;
+  resize: vertical;
+}
+
+.create-session-sidebar {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.create-session-sidebar h3 {
+  margin: 0;
+}
+
+.source-stat {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.source-stat span {
+  color: #64748b;
+}
+
+.source-tip {
+  padding: 12px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.source-tip h4 {
+  margin: 0 0 6px;
+}
+
+.source-tip p {
+  margin: 0;
+  color: #64748b;
+  line-height: 1.55;
+}
+
 .form-group {
   display: grid;
   gap: 8px;
@@ -413,7 +482,8 @@ button:hover {
   .session-actions,
   .tool-grid,
   .home-hero,
-  .snapshot-grid {
+  .snapshot-grid,
+  .create-session-layout {
     grid-template-columns: 1fr;
   }
 
