@@ -336,6 +336,73 @@ main {
   line-height: 1.55;
 }
 
+.profile-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+}
+
+.profile-header h1 {
+  margin: 0 0 6px;
+}
+
+.profile-header p {
+  margin: 0;
+  color: #64748b;
+}
+
+.profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 18px;
+  align-items: start;
+}
+
+.profile-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.profile-card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.profile-card input:disabled {
+  background: #f3f4f6;
+  color: #64748b;
+}
+
+.profile-facts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.profile-facts div:last-child {
+  border-bottom: none;
+}
+
+.profile-facts span {
+  color: #64748b;
+}
+
+.profile-message {
+  color: #166534;
+}
+
+.profile-message-error {
+  color: #dc2626;
+}
+
 .form-group {
   display: grid;
   gap: 8px;
@@ -483,7 +550,8 @@ button:hover {
   .tool-grid,
   .home-hero,
   .snapshot-grid,
-  .create-session-layout {
+  .create-session-layout,
+  .profile-layout {
     grid-template-columns: 1fr;
   }
 

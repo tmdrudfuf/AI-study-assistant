@@ -53,7 +53,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// 특정 세션 조회
+// Load a single session.
 router.get('/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -71,7 +71,7 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// 세션 수정
+// Update a session.
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
   const { title, original_text, summary } = req.body;
@@ -95,7 +95,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// 세션 삭제
+// Delete a session.
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;
   try {
@@ -118,9 +118,7 @@ function getOpenAIClient() {
   const isPlaceholder =
     apiKey &&
     (apiKey.includes('your_openai_api_key_here') ||
-      apiKey.includes('OpenAI_API_KEY') ||
-      apiKey.includes('실제') ||
-      apiKey.includes('ë„ˆ'));
+      apiKey.includes('OpenAI_API_KEY'));
 
   if (!apiKey || isPlaceholder) {
     throw new Error('OPENAI_API_KEY is not configured. Set OPENAI_API_KEY in server/.env.');
@@ -194,7 +192,7 @@ function getQuizzesByLanguage(session, languageCode) {
   };
 }
 
-// AI 요약 생성
+// AI summary generation
 router.post('/:id/summarize', async (req, res) => {
   const { id } = req.params;
   const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
@@ -236,7 +234,7 @@ ${text}`,
       throw new Error('OpenAI returned an empty summary');
     }
 
-    // DB에 언어별 요약 저장
+    // Store the summary by language.
     const summaryColumn = languageCode === 'en' ? 'summary_en' : 'summary_ko';
     const updated = await db.query(
       `UPDATE study_sessions SET ${summaryColumn} = $1, summary = $1 WHERE id = $2 AND user_id = $3 RETURNING *`,
@@ -253,7 +251,7 @@ ${text}`,
   }
 });
 
-// AI 퀴즈 생성
+// AI quiz generation
 router.post('/:id/quiz', async (req, res) => {
   const { id } = req.params;
   const languageCode = req.body?.language === 'en' ? 'en' : 'ko';

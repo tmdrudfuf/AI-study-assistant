@@ -32,7 +32,7 @@ export default function Signup() {
         return;
       }
 
-      // 토큰과 사용자 정보 저장
+      // Store token and user information.
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       setToken(data.token);
@@ -43,7 +43,7 @@ export default function Signup() {
         navigate('/dashboard');
       }, 1000);
     } catch (err) {
-      setError('서버 연결에 실패했습니다.');
+      setError('Unable to connect to the server.');
     }
   };
 

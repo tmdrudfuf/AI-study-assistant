@@ -50,14 +50,14 @@ export default function SessionDetail() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || '세션을 불러올 수 없습니다.');
+          throw new Error(data.error || 'Unable to load this session.');
         }
 
         setSession(data);
         setEditTitle(data.title);
         setEditText(data.original_text);
       } catch (err) {
-        setError(`❌ 오류: ${err.message}`);
+        setError(`Error: ${err.message}`);
       } finally {
         setLoading(false);
       }
@@ -68,7 +68,7 @@ export default function SessionDetail() {
 
   const handleSaveChanges = async () => {
     if (!editTitle.trim() || !editText.trim()) {
-      setError('제목과 텍스트를 입력해주세요.');
+      setError('Please enter both a title and original text.');
       return;
     }
 
@@ -89,16 +89,16 @@ export default function SessionDetail() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || '수정에 실패했습니다.');
+        throw new Error(data.error || 'Failed to update this session.');
       }
 
       setSession(data);
       setIsEditing(false);
       setError('');
-      // 성공 메시지 표시
-      alert('✅ 세션이 수정되었습니다.');
+      // Show success feedback.
+      alert('Session updated.');
     } catch (err) {
-      setError(`❌ 오류: ${err.message}`);
+      setError(`Error: ${err.message}`);
     } finally {
       setSavingChanges(false);
     }
@@ -119,15 +119,15 @@ export default function SessionDetail() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || data.error || '요약 생성에 실패했습니다.');
+        throw new Error(data.detail || data.error || 'Failed to generate summary.');
       }
 
       setSession(data.session);
       setActiveTab('summary');
       setError('');
-      alert('✅ 요약이 생성되었습니다.');
+      alert('Summary generated.');
     } catch (err) {
-      setError(`❌ 오류: ${err.message}`);
+      setError(`Error: ${err.message}`);
     } finally {
       setGeneratingSummary(false);
     }
@@ -148,7 +148,7 @@ export default function SessionDetail() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || data.error || '퀴즈 생성에 실패했습니다.');
+        throw new Error(data.detail || data.error || 'Failed to generate quiz.');
       }
 
       setSession(data.session);
@@ -156,9 +156,9 @@ export default function SessionDetail() {
       setActiveTab('quiz');
       setQuizLanguage(language);
       setError('');
-      alert('✅ 퀴즈가 생성되었습니다.');
+      alert('Quiz generated.');
     } catch (err) {
-      setError(`❌ 오류: ${err.message}`);
+      setError(`Error: ${err.message}`);
     } finally {
       setGeneratingQuiz(false);
     }
@@ -300,7 +300,7 @@ export default function SessionDetail() {
   };
 
   const handleDeleteSession = async () => {
-    if (!window.confirm('정말 이 세션을 삭제하시겠습니까?')) {
+    if (!window.confirm('Delete this session?')) {
       return;
     }
 
@@ -315,13 +315,13 @@ export default function SessionDetail() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || '삭제에 실패했습니다.');
+        throw new Error(data.error || 'Failed to delete this session.');
       }
 
-      alert('✅ 세션이 삭제되었습니다.');
+      alert('Session deleted.');
       navigate('/dashboard');
     } catch (err) {
-      setError(`❌ 오류: ${err.message}`);
+      setError(`Error: ${err.message}`);
     }
   };
 
@@ -502,14 +502,14 @@ export default function SessionDetail() {
     </div>
   );
 
-  if (loading) return <section className="page-card"><p>로딩 중...</p></section>;
+  if (loading) return <section className="page-card"><p>Loading...</p></section>;
 
-  if (!session) return <section className="page-card"><p>세션을 찾을 수 없습니다.</p></section>;
+  if (!session) return <section className="page-card"><p>Session not found.</p></section>;
 
   return (
     <section className="page-card">
       <button onClick={() => navigate('/dashboard')} style={{ marginBottom: '20px' }}>
-        ← Dashboard로 돌아가기
+        Back to Dashboard
       </button>
 
       {error && <p style={{ color: 'red', marginBottom: '15px' }}>{error}</p>}
@@ -661,7 +661,7 @@ export default function SessionDetail() {
 
       {activeTab === 'text' && (
       <div style={{ marginBottom: '30px' }}>
-        <h3 style={{ marginBottom: '10px' }}>📝 원본 텍스트</h3>
+        <h3 style={{ marginBottom: '10px' }}>Original Text</h3>
         {isEditing ? (
           <textarea
             value={editText}
@@ -697,7 +697,7 @@ export default function SessionDetail() {
       <div style={{ marginBottom: '30px' }}>
         {(session.summary_ko || session.summary_en || session.summary) ? (
         <div style={{ marginBottom: '30px' }}>
-          <h3 style={{ marginBottom: '10px' }}>✨ 요약</h3>
+          <h3 style={{ marginBottom: '10px' }}>Summary</h3>
           <div style={{ display: 'grid', gap: '15px' }}>
             {(session.summary_ko || (!session.summary_en && session.summary)) && (
               <div
@@ -711,7 +711,7 @@ export default function SessionDetail() {
                   wordBreak: 'break-word',
                 }}
               >
-                <h4 style={{ marginTop: 0 }}>한국어 요약</h4>
+                <h4 style={{ marginTop: 0 }}>Korean Summary</h4>
                 {session.summary_ko || session.summary}
               </div>
             )}
@@ -779,7 +779,7 @@ export default function SessionDetail() {
                 cursor: 'pointer',
               }}
             >
-              다시 풀기
+              Reset Answers
             </button>
           </div>
           <div style={{ display: 'grid', gap: '15px' }}>
@@ -843,10 +843,10 @@ export default function SessionDetail() {
                     }}
                   >
                     <strong>
-                      {selectedAnswers[questionIndex] === item.answerIndex ? '정답입니다!' : '오답입니다.'}
+                      {selectedAnswers[questionIndex] === item.answerIndex ? 'Correct!' : 'Incorrect.'}
                     </strong>
                     <p style={{ margin: '6px 0 0 0' }}>
-                      정답: {String.fromCharCode(65 + item.answerIndex)} - {item.explanation}
+                      Answer: {String.fromCharCode(65 + item.answerIndex)} - {item.explanation}
                     </p>
                   </div>
                 )}
@@ -864,15 +864,15 @@ export default function SessionDetail() {
               gap: '8px',
             }}
           >
-            <h4 style={{ margin: 0 }}>퀴즈 결과</h4>
+            <h4 style={{ margin: 0 }}>Quiz Results</h4>
             <p style={{ margin: 0 }}>
-              맞은 개수: <strong style={{ color: '#15803d' }}>{correctCount}</strong> / {quizQuestions.length}
+              Correct: <strong style={{ color: '#15803d' }}>{correctCount}</strong> / {quizQuestions.length}
             </p>
             <p style={{ margin: 0 }}>
-              틀린 개수: <strong style={{ color: '#dc2626' }}>{incorrectCount}</strong>
+              Incorrect: <strong style={{ color: '#dc2626' }}>{incorrectCount}</strong>
             </p>
             <p style={{ margin: 0 }}>
-              아직 안 푼 문제: <strong>{unansweredCount}</strong>
+              Unanswered: <strong>{unansweredCount}</strong>
             </p>
           </div>
         </div>
@@ -934,7 +934,7 @@ export default function SessionDetail() {
                   </div>
                   <div className="study-card-layout">
                     <button className="card-arrow" onClick={showPreviousFlashcard} aria-label="Previous flashcard">
-                      ‹
+                      {'<'}
                     </button>
                     <button
                       type="button"
@@ -945,7 +945,7 @@ export default function SessionDetail() {
                       <p>{studyCardFlipped ? currentFlashcard.back : currentFlashcard.front}</p>
                     </button>
                     <button className="card-arrow" onClick={showNextFlashcard} aria-label="Next flashcard">
-                      ›
+                      {'>'}
                     </button>
                   </div>
                   <p className="subtle-text">Click the card to flip it.</p>
@@ -979,7 +979,7 @@ export default function SessionDetail() {
             cursor: 'pointer',
           }}
         >
-          Dashboard로 돌아가기
+          Back to Dashboard
         </button>
       </div>
     </section>

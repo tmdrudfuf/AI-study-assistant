@@ -24,7 +24,7 @@ function App() {
   const [token, setToken] = useState(null);
   const navigate = useNavigate();
 
-  // 초기 로딩 시 localStorage에서 토큰 확인
+  // Restore auth state from localStorage on initial load.
   useEffect(() => {
     const savedToken = localStorage.getItem('token');
     const savedUser = localStorage.getItem('user');

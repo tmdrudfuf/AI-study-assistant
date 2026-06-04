@@ -31,18 +31,18 @@ export default function Login() {
         return;
       }
 
-      // 토큰과 사용자 정보 저장
+      // Store token and user information.
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       setToken(data.token);
       setUser(data.user);
 
-      setMessage('로그인 성공! Dashboard로 이동하세요.');
+      setMessage('Login successful. Redirecting to dashboard...');
       setTimeout(() => {
         navigate('/dashboard');
       }, 1000);
     } catch (err) {
-      setError('서버 연결에 실패했습니다.');
+      setError('Unable to connect to the server.');
     }
   };
 
