@@ -19,6 +19,7 @@ export default function SessionDetail() {
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [flippedFlashcards, setFlippedFlashcards] = useState({});
+  const [activeTab, setActiveTab] = useState('text');
 
   useEffect(() => {
     if (!token) {
@@ -111,6 +112,7 @@ export default function SessionDetail() {
       }
 
       setSession(data.session);
+      setActiveTab('summary');
       setError('');
       alert('✅ 요약이 생성되었습니다.');
     } catch (err) {
@@ -140,6 +142,7 @@ export default function SessionDetail() {
 
       setSession(data.session);
       setSelectedAnswers({});
+      setActiveTab('quiz');
       setError('');
       alert('✅ 퀴즈가 생성되었습니다.');
     } catch (err) {
@@ -169,6 +172,7 @@ export default function SessionDetail() {
 
       setSession(data.session);
       setFlippedFlashcards({});
+      setActiveTab('flashcards');
       setError('');
       alert('Flashcards generated.');
     } catch (err) {
@@ -276,164 +280,124 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '30px' }}>
+      <div className="session-actions">
         {!isEditing ? (
           <>
-            <button
-              onClick={() => setIsEditing(true)}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#2563eb',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              ✏️ 수정
-            </button>
-            <button
-              onClick={() => handleGenerateSummary('ko')}
-              disabled={generatingSummary}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: generatingSummary ? 0.7 : 1,
-              }}
-            >
-              {generatingSummary ? '생성 중...' : '✨ 요약 생성 (한글)'}
-            </button>
-            <button
-              onClick={() => handleGenerateSummary('en')}
-              disabled={generatingSummary}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#0f766e',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: generatingSummary ? 0.7 : 1,
-              }}
-            >
-              {generatingSummary ? 'Generating...' : '✨ Summary (English)'}
-            </button>
-            <button
-              onClick={() => handleGenerateQuiz('ko')}
-              disabled={generatingQuiz}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#7c3aed',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: generatingQuiz ? 0.7 : 1,
-              }}
-            >
-              {generatingQuiz ? '생성 중...' : '🧠 퀴즈 생성 (한글)'}
-            </button>
-            <button
-              onClick={() => handleGenerateQuiz('en')}
-              disabled={generatingQuiz}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#9333ea',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: generatingQuiz ? 0.7 : 1,
-              }}
-            >
-              {generatingQuiz ? 'Generating...' : '🧠 Quiz (English)'}
-            </button>
-            <button
-              onClick={() => handleGenerateFlashcards('ko')}
-              disabled={generatingFlashcards}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#f59e0b',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: generatingFlashcards ? 0.7 : 1,
-              }}
-            >
-              {generatingFlashcards ? 'Generating...' : 'Flashcards (Korean)'}
-            </button>
-            <button
-              onClick={() => handleGenerateFlashcards('en')}
-              disabled={generatingFlashcards}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#d97706',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: generatingFlashcards ? 0.7 : 1,
-              }}
-            >
-              {generatingFlashcards ? 'Generating...' : 'Flashcards (English)'}
-            </button>
-            <button
-              onClick={handleDeleteSession}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#ef4444',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              🗑️ 삭제
-            </button>
+            <div className="action-panel">
+              <h3>Session</h3>
+              <div className="action-row">
+                <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
+                  Edit
+                </button>
+                <button className="btn btn-danger" onClick={handleDeleteSession}>
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            <div className="action-panel action-panel-wide">
+              <h3>AI Tools</h3>
+              <div className="tool-grid">
+                <div className="tool-group">
+                  <h4>Summary</h4>
+                  <div className="action-row">
+                    <button
+                      className="btn btn-green"
+                      onClick={() => handleGenerateSummary('ko')}
+                      disabled={generatingSummary}
+                    >
+                      {generatingSummary ? 'Generating...' : 'Korean'}
+                    </button>
+                    <button
+                      className="btn btn-teal"
+                      onClick={() => handleGenerateSummary('en')}
+                      disabled={generatingSummary}
+                    >
+                      {generatingSummary ? 'Generating...' : 'English'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="tool-group">
+                  <h4>Quiz</h4>
+                  <div className="action-row">
+                    <button
+                      className="btn btn-purple"
+                      onClick={() => handleGenerateQuiz('ko')}
+                      disabled={generatingQuiz}
+                    >
+                      {generatingQuiz ? 'Generating...' : 'Korean'}
+                    </button>
+                    <button
+                      className="btn btn-violet"
+                      onClick={() => handleGenerateQuiz('en')}
+                      disabled={generatingQuiz}
+                    >
+                      {generatingQuiz ? 'Generating...' : 'English'}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="tool-group">
+                  <h4>Flashcards</h4>
+                  <div className="action-row">
+                    <button
+                      className="btn btn-amber"
+                      onClick={() => handleGenerateFlashcards('ko')}
+                      disabled={generatingFlashcards}
+                    >
+                      {generatingFlashcards ? 'Generating...' : 'Korean'}
+                    </button>
+                    <button
+                      className="btn btn-orange"
+                      onClick={() => handleGenerateFlashcards('en')}
+                      disabled={generatingFlashcards}
+                    >
+                      {generatingFlashcards ? 'Generating...' : 'English'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </>
         ) : (
-          <>
-            <button
-              onClick={handleSaveChanges}
-              disabled={savingChanges}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#10b981',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                opacity: savingChanges ? 0.7 : 1,
-              }}
-            >
-              {savingChanges ? '저장 중...' : '💾 저장'}
-            </button>
-            <button
-              onClick={() => {
-                setIsEditing(false);
-                setEditTitle(session.title);
-                setEditText(session.original_text);
-              }}
-              style={{
-                padding: '10px 20px',
-                backgroundColor: '#999',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              ✕ 취소
-            </button>
-          </>
+          <div className="action-panel">
+            <h3>Edit Session</h3>
+            <div className="action-row">
+              <button className="btn btn-green" onClick={handleSaveChanges} disabled={savingChanges}>
+                {savingChanges ? 'Saving...' : 'Save'}
+              </button>
+              <button
+                className="btn btn-muted"
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditTitle(session.title);
+                  setEditText(session.original_text);
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         )}
       </div>
 
+      <div className="content-tabs">
+        <button className={activeTab === 'text' ? 'tab-button tab-button-active' : 'tab-button'} onClick={() => setActiveTab('text')}>
+          Original Text
+        </button>
+        <button className={activeTab === 'summary' ? 'tab-button tab-button-active' : 'tab-button'} onClick={() => setActiveTab('summary')}>
+          Summary
+        </button>
+        <button className={activeTab === 'quiz' ? 'tab-button tab-button-active' : 'tab-button'} onClick={() => setActiveTab('quiz')}>
+          Quiz
+        </button>
+        <button className={activeTab === 'flashcards' ? 'tab-button tab-button-active' : 'tab-button'} onClick={() => setActiveTab('flashcards')}>
+          Flashcards
+        </button>
+      </div>
+
+      {activeTab === 'text' && (
       <div style={{ marginBottom: '30px' }}>
         <h3 style={{ marginBottom: '10px' }}>📝 원본 텍스트</h3>
         {isEditing ? (
@@ -465,8 +429,11 @@ export default function SessionDetail() {
           </div>
         )}
       </div>
+      )}
 
-      {(session.summary_ko || session.summary_en || session.summary) && (
+      {activeTab === 'summary' && (
+      <div style={{ marginBottom: '30px' }}>
+        {(session.summary_ko || session.summary_en || session.summary) ? (
         <div style={{ marginBottom: '30px' }}>
           <h3 style={{ marginBottom: '10px' }}>✨ 요약</h3>
           <div style={{ display: 'grid', gap: '15px' }}>
@@ -504,9 +471,18 @@ export default function SessionDetail() {
             )}
           </div>
         </div>
+        ) : (
+          <div className="empty-state">
+            <h3>Summary</h3>
+            <p>No summary yet. Use the AI Tools panel to generate a Korean or English summary.</p>
+          </div>
+        )}
+      </div>
       )}
 
-      {quizQuestions.length > 0 && (
+      {activeTab === 'quiz' && (
+      <div style={{ marginBottom: '30px' }}>
+        {quizQuestions.length > 0 ? (
         <div style={{ marginBottom: '30px' }}>
           <h3 style={{ marginBottom: '10px' }}>🧠 퀴즈</h3>
           <div style={{ marginBottom: '15px' }}>
@@ -618,9 +594,18 @@ export default function SessionDetail() {
             </p>
           </div>
         </div>
+        ) : (
+          <div className="empty-state">
+            <h3>Quiz</h3>
+            <p>No quiz yet. Use the AI Tools panel to generate a Korean or English quiz.</p>
+          </div>
+        )}
+      </div>
       )}
 
-      {(flashcardsKo.length > 0 || flashcardsEn.length > 0) && (
+      {activeTab === 'flashcards' && (
+      <div style={{ marginBottom: '30px' }}>
+        {(flashcardsKo.length > 0 || flashcardsEn.length > 0) ? (
         <div style={{ marginBottom: '30px' }}>
           <h3 style={{ marginBottom: '10px' }}>Flashcards</h3>
 
@@ -692,6 +677,13 @@ export default function SessionDetail() {
             </div>
           )}
         </div>
+        ) : (
+          <div className="empty-state">
+            <h3>Flashcards</h3>
+            <p>No flashcards yet. Use the AI Tools panel to generate Korean or English flashcards.</p>
+          </div>
+        )}
+      </div>
       )}
 
       <div style={{ textAlign: 'center', marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #ddd' }}>
