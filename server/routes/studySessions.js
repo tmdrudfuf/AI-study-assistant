@@ -301,4 +301,83 @@ ${text}`,
   }
 });
 
+// AI flashcards generation
+router.post('/:id/flashcards', async (req, res) => {
+  const { id } = req.params;
+  const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
+  const language = languageCode === 'en' ? 'English' : 'Korean';
+
+  try {
+    const session = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (session.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const currentSession = session.rows[0];
+    const text = currentSession.original_text;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ error: 'Original text is required to generate flashcards' });
+    }
+
+    const openai = getOpenAIClient();
+    const response = await openai.responses.create({
+      model: process.env.OPENAI_MODEL || 'gpt-5.2',
+      instructions:
+        `You are an AI study assistant. Create useful flashcards in ${language}. Return only valid JSON with no markdown.`,
+      input: `Create flashcards in ${language} from the following study material.
+
+Return only JSON in this exact shape:
+{
+  "cards": [
+    {
+      "front": "Question, term, or prompt in ${language}",
+      "back": "Answer or explanation in ${language}"
+    }
+  ]
+}
+
+Rules:
+- Create 8 flashcards.
+- Keep the front short.
+- Make the back clear and useful for review.
+- Focus on key concepts, definitions, processes, and cause/effect relationships.
+
+Study material:
+${text}`,
+    });
+
+    const output = response.output_text?.trim();
+    if (!output) {
+      throw new Error('OpenAI returned empty flashcards');
+    }
+
+    const generated = parseModelJson(output);
+    if (!Array.isArray(generated.cards) || generated.cards.length === 0) {
+      throw new Error('OpenAI returned an invalid flashcards format');
+    }
+
+    const flashcards = {
+      ...(currentSession.flashcards_json || {}),
+      [languageCode]: generated,
+    };
+
+    const updated = await db.query(
+      'UPDATE study_sessions SET flashcards_json = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [JSON.stringify(flashcards), id, req.user.userId]
+    );
+
+    res.json({ flashcards, session: updated.rows[0] });
+  } catch (error) {
+    console.error('Failed to generate flashcards:', error);
+    res.status(500).json({
+      error: 'Failed to generate flashcards',
+      detail: error.message || 'Unknown error',
+    });
+  }
+});
+
 module.exports = router;

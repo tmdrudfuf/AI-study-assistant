@@ -16,7 +16,9 @@ export default function SessionDetail() {
   const [savingChanges, setSavingChanges] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [flippedFlashcards, setFlippedFlashcards] = useState({});
 
   useEffect(() => {
     if (!token) {
@@ -147,6 +149,35 @@ export default function SessionDetail() {
     }
   };
 
+  const handleGenerateFlashcards = async (language) => {
+    setGeneratingFlashcards(true);
+    try {
+      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/flashcards`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ language }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || 'Failed to generate flashcards.');
+      }
+
+      setSession(data.session);
+      setFlippedFlashcards({});
+      setError('');
+      alert('Flashcards generated.');
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    } finally {
+      setGeneratingFlashcards(false);
+    }
+  };
+
   const handleDeleteSession = async () => {
     if (!window.confirm('정말 이 세션을 삭제하시겠습니까?')) {
       return;
@@ -194,6 +225,16 @@ export default function SessionDetail() {
   ).length;
   const incorrectCount = answeredCount - correctCount;
   const unansweredCount = quizQuestions.length - answeredCount;
+  const flashcardsKo = session?.flashcards_json?.ko?.cards || [];
+  const flashcardsEn = session?.flashcards_json?.en?.cards || [];
+
+  const toggleFlashcard = (language, index) => {
+    const cardKey = `${language}-${index}`;
+    setFlippedFlashcards((cards) => ({
+      ...cards,
+      [cardKey]: !cards[cardKey],
+    }));
+  };
 
   if (loading) return <section className="page-card"><p>로딩 중...</p></section>;
 
@@ -310,6 +351,36 @@ export default function SessionDetail() {
               }}
             >
               {generatingQuiz ? 'Generating...' : '🧠 Quiz (English)'}
+            </button>
+            <button
+              onClick={() => handleGenerateFlashcards('ko')}
+              disabled={generatingFlashcards}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#f59e0b',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                opacity: generatingFlashcards ? 0.7 : 1,
+              }}
+            >
+              {generatingFlashcards ? 'Generating...' : 'Flashcards (Korean)'}
+            </button>
+            <button
+              onClick={() => handleGenerateFlashcards('en')}
+              disabled={generatingFlashcards}
+              style={{
+                padding: '10px 20px',
+                backgroundColor: '#d97706',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                opacity: generatingFlashcards ? 0.7 : 1,
+              }}
+            >
+              {generatingFlashcards ? 'Generating...' : 'Flashcards (English)'}
             </button>
             <button
               onClick={handleDeleteSession}
@@ -546,6 +617,80 @@ export default function SessionDetail() {
               아직 안 푼 문제: <strong>{unansweredCount}</strong>
             </p>
           </div>
+        </div>
+      )}
+
+      {(flashcardsKo.length > 0 || flashcardsEn.length > 0) && (
+        <div style={{ marginBottom: '30px' }}>
+          <h3 style={{ marginBottom: '10px' }}>Flashcards</h3>
+
+          {flashcardsKo.length > 0 && (
+            <div style={{ marginBottom: '25px' }}>
+              <h4>Korean Flashcards</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                {flashcardsKo.map((card, index) => {
+                  const cardKey = `ko-${index}`;
+                  const isFlipped = Boolean(flippedFlashcards[cardKey]);
+
+                  return (
+                    <button
+                      key={cardKey}
+                      type="button"
+                      onClick={() => toggleFlashcard('ko', index)}
+                      style={{
+                        minHeight: '150px',
+                        padding: '16px',
+                        backgroundColor: isFlipped ? '#fff7ed' : '#fffbeb',
+                        color: '#1f2937',
+                        border: '1px solid #fbbf24',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        lineHeight: '1.5',
+                      }}
+                    >
+                      <strong>{isFlipped ? 'Back' : 'Front'}</strong>
+                      <p style={{ marginBottom: 0 }}>{isFlipped ? card.back : card.front}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {flashcardsEn.length > 0 && (
+            <div>
+              <h4>English Flashcards</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
+                {flashcardsEn.map((card, index) => {
+                  const cardKey = `en-${index}`;
+                  const isFlipped = Boolean(flippedFlashcards[cardKey]);
+
+                  return (
+                    <button
+                      key={cardKey}
+                      type="button"
+                      onClick={() => toggleFlashcard('en', index)}
+                      style={{
+                        minHeight: '150px',
+                        padding: '16px',
+                        backgroundColor: isFlipped ? '#fff7ed' : '#fffbeb',
+                        color: '#1f2937',
+                        border: '1px solid #fbbf24',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        lineHeight: '1.5',
+                      }}
+                    >
+                      <strong>{isFlipped ? 'Back' : 'Front'}</strong>
+                      <p style={{ marginBottom: 0 }}>{isFlipped ? card.back : card.front}</p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
