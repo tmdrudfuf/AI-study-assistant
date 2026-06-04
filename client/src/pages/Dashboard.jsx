@@ -29,12 +29,12 @@ export default function Dashboard() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.message || '세션을 불러올 수 없습니다.');
+          throw new Error(data.message || 'Unable to load study sessions.');
         }
 
         setSessions(data || []);
       } catch (err) {
-        setError(`❌ 오류: ${err.message}`);
+        setError(`Error: ${err.message}`);
         setSessions([]);
       } finally {
         setLoading(false);
@@ -58,69 +58,65 @@ export default function Dashboard() {
     }
   };
 
+  const hasSummary = (session) => Boolean(session.summary_ko || session.summary_en || session.summary);
+
+  const hasQuiz = (session) => Boolean(session.quiz_json?.questions?.length);
+
+  const hasFlashcards = (session) => {
+    const koreanCards = session.flashcards_json?.ko?.cards || [];
+    const englishCards = session.flashcards_json?.en?.cards || [];
+    return koreanCards.length > 0 || englishCards.length > 0;
+  };
+
   return (
     <section className="page-card">
-      <h1>📚 My Study Sessions</h1>
-      
-      <div style={{ marginBottom: '20px' }}>
+      <div className="dashboard-header">
+        <div>
+          <h1>My Study Sessions</h1>
+          <p>{sessions.length} saved sessions</p>
+        </div>
         <Link to="/study-session">
-          <button style={{ padding: '10px 20px', fontSize: '16px' }}>
-            ➕ New Study Session
-          </button>
+          <button className="btn btn-primary">New Study Session</button>
         </Link>
       </div>
 
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       {loading ? (
-        <p>로딩 중...</p>
+        <p>Loading...</p>
       ) : sessions.length === 0 ? (
-        <p style={{ textAlign: 'center', color: '#666', marginTop: '40px' }}>
-          작성한 세션이 없습니다. 새 세션을 만들어보세요! 🎓
-        </p>
+        <div className="empty-state">
+          <h3>No study sessions yet</h3>
+          <p>Create your first session to generate summaries, quizzes, and flashcards.</p>
+        </div>
       ) : (
-        <div style={{ display: 'grid', gap: '15px' }}>
+        <div className="session-list">
           {sessions.map((session) => (
-            <Link to={`/study-session/${session.id}`} key={session.id} style={{ textDecoration: 'none' }}>
-              <div
-                style={{
-                  border: '1px solid #ddd',
-                  borderRadius: '8px',
-                  padding: '15px',
-                  backgroundColor: '#f9f9f9',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
-                  e.currentTarget.style.transform = 'translateY(-2px)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.boxShadow = 'none';
-                  e.currentTarget.style.transform = 'translateY(0)';
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                  <div style={{ flex: 1 }}>
-                    <h3 style={{ margin: '0 0 8px 0', color: '#2563eb' }}>
-                      {session.title}
-                    </h3>
-                    <p style={{
-                      margin: '0 0 10px 0',
-                      color: '#666',
-                      fontSize: '14px',
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}>
-                      {session.original_text.substring(0, 100)}...
-                    </p>
-                    <div style={{ display: 'flex', gap: '20px', fontSize: '12px', color: '#999' }}>
-                      <span>📅 {formatDate(session.created_at)}</span>
-                      <span>🆔 #{session.id}</span>
-                    </div>
-                  </div>
+            <Link to={`/study-session/${session.id}`} key={session.id} className="session-card">
+              <div>
+                <div className="session-card-top">
+                  <h3>{session.title}</h3>
+                  <span>#{session.id}</span>
                 </div>
+                <p className="session-preview">
+                  {(session.original_text || '').substring(0, 140)}
+                  {session.original_text?.length > 140 ? '...' : ''}
+                </p>
+                <div className="session-meta">
+                  <span>{formatDate(session.created_at)}</span>
+                </div>
+              </div>
+
+              <div className="status-badges">
+                <span className={hasSummary(session) ? 'status-badge status-complete' : 'status-badge'}>
+                  Summary {hasSummary(session) ? '✓' : '-'}
+                </span>
+                <span className={hasQuiz(session) ? 'status-badge status-complete' : 'status-badge'}>
+                  Quiz {hasQuiz(session) ? '✓' : '-'}
+                </span>
+                <span className={hasFlashcards(session) ? 'status-badge status-complete' : 'status-badge'}>
+                  Flashcards {hasFlashcards(session) ? '✓' : '-'}
+                </span>
               </div>
             </Link>
           ))}
