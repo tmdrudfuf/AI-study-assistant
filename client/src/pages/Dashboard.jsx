@@ -6,6 +6,9 @@ export default function Dashboard() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('newest');
   const { token } = useAuth();
   const navigate = useNavigate();
 
@@ -68,6 +71,30 @@ export default function Dashboard() {
     return koreanCards.length > 0 || englishCards.length > 0;
   };
 
+  const isComplete = (session) => hasSummary(session) && hasQuiz(session) && hasFlashcards(session);
+
+  const matchesStatusFilter = (session) => {
+    if (statusFilter === 'needs-summary') return !hasSummary(session);
+    if (statusFilter === 'needs-quiz') return !hasQuiz(session);
+    if (statusFilter === 'needs-flashcards') return !hasFlashcards(session);
+    if (statusFilter === 'complete') return isComplete(session);
+    return true;
+  };
+
+  const normalizedSearch = searchTerm.trim().toLowerCase();
+  const filteredSessions = sessions.filter((session) => {
+    const searchableText = `${session.title || ''} ${session.original_text || ''}`.toLowerCase();
+    return searchableText.includes(normalizedSearch) && matchesStatusFilter(session);
+  });
+
+  const sortedSessions = [...filteredSessions].sort((a, b) => {
+    if (sortBy === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
+    if (sortBy === 'complete-first') return Number(isComplete(b)) - Number(isComplete(a));
+    if (sortBy === 'incomplete-first') return Number(isComplete(a)) - Number(isComplete(b));
+    if (sortBy === 'title') return (a.title || '').localeCompare(b.title || '');
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+
   return (
     <section className="page-card">
       <div className="dashboard-header">
@@ -80,6 +107,34 @@ export default function Dashboard() {
         </Link>
       </div>
 
+      <div className="dashboard-filters">
+        <input
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Search by title or text"
+        />
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+          <option value="all">All sessions</option>
+          <option value="needs-summary">Needs summary</option>
+          <option value="needs-quiz">Needs quiz</option>
+          <option value="needs-flashcards">Needs flashcards</option>
+          <option value="complete">Complete</option>
+        </select>
+        <select value={sortBy} onChange={(event) => setSortBy(event.target.value)}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="complete-first">Complete first</option>
+          <option value="incomplete-first">Incomplete first</option>
+          <option value="title">Title A-Z</option>
+        </select>
+      </div>
+
+      {!loading && sessions.length > 0 && (
+        <p className="filter-count">
+          Showing {sortedSessions.length} of {sessions.length}
+        </p>
+      )}
+
       {error && <p style={{ color: 'red' }}>{error}</p>}
 
       {loading ? (
@@ -89,9 +144,14 @@ export default function Dashboard() {
           <h3>No study sessions yet</h3>
           <p>Create your first session to generate summaries, quizzes, and flashcards.</p>
         </div>
+      ) : sortedSessions.length === 0 ? (
+        <div className="empty-state">
+          <h3>No matching sessions</h3>
+          <p>Try a different search term or filter.</p>
+        </div>
       ) : (
         <div className="session-list">
-          {sessions.map((session) => (
+          {sortedSessions.map((session) => (
             <Link to={`/study-session/${session.id}`} key={session.id} className="session-card">
               <div>
                 <div className="session-card-top">
