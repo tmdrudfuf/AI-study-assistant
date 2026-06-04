@@ -74,16 +74,26 @@ router.get('/:id', async (req, res) => {
 // Update a session.
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, original_text, summary } = req.body;
+  const { title, original_text, summary, summary_ko, summary_en } = req.body;
   try {
     const result = await db.query(
       `UPDATE study_sessions 
        SET title = COALESCE($1, title), 
            original_text = COALESCE($2, original_text),
-           summary = COALESCE($3, summary)
-       WHERE id = $4 AND user_id = $5
+           summary = COALESCE($3, summary),
+           summary_ko = COALESCE($4, summary_ko),
+           summary_en = COALESCE($5, summary_en)
+       WHERE id = $6 AND user_id = $7
        RETURNING *`,
-      [title || null, original_text || null, summary || null, id, req.user.userId]
+      [
+        title || null,
+        original_text || null,
+        summary || null,
+        summary_ko || null,
+        summary_en || null,
+        id,
+        req.user.userId,
+      ]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Session not found' });

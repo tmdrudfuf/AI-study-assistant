@@ -14,12 +14,15 @@ export default function SessionDetail() {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
   const [editText, setEditText] = useState('');
+  const [editingSummaryLanguage, setEditingSummaryLanguage] = useState(null);
+  const [editSummaryText, setEditSummaryText] = useState('');
   const [savingChanges, setSavingChanges] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [quizLanguage, setQuizLanguage] = useState('ko');
+  const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
   const [flippedFlashcards, setFlippedFlashcards] = useState({});
   const [activeTab, setActiveTab] = useState('text');
   const [flashcardMode, setFlashcardMode] = useState('study');
@@ -104,6 +107,50 @@ export default function SessionDetail() {
     }
   };
 
+  const startEditingSummary = (language, value) => {
+    setEditingSummaryLanguage(language);
+    setEditSummaryText(value || '');
+  };
+
+  const cancelEditingSummary = () => {
+    setEditingSummaryLanguage(null);
+    setEditSummaryText('');
+  };
+
+  const handleSaveSummary = async () => {
+    if (!editingSummaryLanguage || !editSummaryText.trim()) return;
+
+    setSavingChanges(true);
+    try {
+      const payload =
+        editingSummaryLanguage === 'en'
+          ? { summary_en: editSummaryText }
+          : { summary_ko: editSummaryText, summary: editSummaryText };
+
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to update summary.');
+      }
+
+      setSession(data);
+      cancelEditingSummary();
+      setError('');
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+
   const handleGenerateSummary = async (language) => {
     setGeneratingSummary(true);
     try {
@@ -155,6 +202,7 @@ export default function SessionDetail() {
       setSelectedAnswers({});
       setActiveTab('quiz');
       setQuizLanguage(language);
+      setCurrentQuizIndex(0);
       setError('');
       alert('Quiz generated.');
     } catch (err) {
@@ -343,6 +391,8 @@ export default function SessionDetail() {
   const quizQuestionsKo = session?.quiz_json?.ko?.questions || legacyQuizQuestions;
   const quizQuestionsEn = session?.quiz_json?.en?.questions || [];
   const quizQuestions = quizLanguage === 'en' ? quizQuestionsEn : quizQuestionsKo;
+  const safeQuizIndex = quizQuestions.length ? Math.min(currentQuizIndex, quizQuestions.length - 1) : 0;
+  const currentQuizQuestion = quizQuestions[safeQuizIndex];
   const answeredCount = quizQuestions.filter((_, index) => selectedAnswers[index] !== undefined).length;
   const correctCount = quizQuestions.filter(
     (item, index) => selectedAnswers[index] !== undefined && selectedAnswers[index] === item.answerIndex
@@ -386,6 +436,17 @@ export default function SessionDetail() {
   const handleQuizLanguageChange = (language) => {
     setQuizLanguage(language);
     setSelectedAnswers({});
+    setCurrentQuizIndex(0);
+  };
+
+  const showPreviousQuizQuestion = () => {
+    if (!quizQuestions.length) return;
+    setCurrentQuizIndex((index) => (index === 0 ? quizQuestions.length - 1 : index - 1));
+  };
+
+  const showNextQuizQuestion = () => {
+    if (!quizQuestions.length) return;
+    setCurrentQuizIndex((index) => (index + 1) % quizQuestions.length);
   };
 
   const renderFlashcardSection = (language, title, cards) => (
@@ -701,6 +762,7 @@ export default function SessionDetail() {
           <div style={{ display: 'grid', gap: '15px' }}>
             {(session.summary_ko || (!session.summary_en && session.summary)) && (
               <div
+                className="summary-panel"
                 style={{
                   backgroundColor: '#f0f9ff',
                   padding: '15px',
@@ -711,12 +773,39 @@ export default function SessionDetail() {
                   wordBreak: 'break-word',
                 }}
               >
-                <h4 style={{ marginTop: 0 }}>Korean Summary</h4>
-                {session.summary_ko || session.summary}
+                <div className="summary-panel-header">
+                  <h4>Korean Summary</h4>
+                  <button
+                    className="mini-button"
+                    onClick={() => startEditingSummary('ko', session.summary_ko || session.summary)}
+                  >
+                    Edit
+                  </button>
+                </div>
+                {editingSummaryLanguage === 'ko' ? (
+                  <div className="summary-edit-form">
+                    <textarea
+                      value={editSummaryText}
+                      onChange={(event) => setEditSummaryText(event.target.value)}
+                      rows="10"
+                    />
+                    <div className="action-row">
+                      <button className="btn btn-green" onClick={handleSaveSummary} disabled={savingChanges || !editSummaryText.trim()}>
+                        {savingChanges ? 'Saving...' : 'Save'}
+                      </button>
+                      <button className="btn btn-muted" onClick={cancelEditingSummary}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  session.summary_ko || session.summary
+                )}
               </div>
             )}
             {session.summary_en && (
               <div
+                className="summary-panel"
                 style={{
                   backgroundColor: '#f0fdf4',
                   padding: '15px',
@@ -727,8 +816,31 @@ export default function SessionDetail() {
                   wordBreak: 'break-word',
                 }}
               >
-                <h4 style={{ marginTop: 0 }}>English Summary</h4>
-                {session.summary_en}
+                <div className="summary-panel-header">
+                  <h4>English Summary</h4>
+                  <button className="mini-button" onClick={() => startEditingSummary('en', session.summary_en)}>
+                    Edit
+                  </button>
+                </div>
+                {editingSummaryLanguage === 'en' ? (
+                  <div className="summary-edit-form">
+                    <textarea
+                      value={editSummaryText}
+                      onChange={(event) => setEditSummaryText(event.target.value)}
+                      rows="10"
+                    />
+                    <div className="action-row">
+                      <button className="btn btn-green" onClick={handleSaveSummary} disabled={savingChanges || !editSummaryText.trim()}>
+                        {savingChanges ? 'Saving...' : 'Save'}
+                      </button>
+                      <button className="btn btn-muted" onClick={cancelEditingSummary}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  session.summary_en
+                )}
               </div>
             )}
           </div>
@@ -766,92 +878,64 @@ export default function SessionDetail() {
         </div>
 
         {quizQuestions.length > 0 ? (
-        <div style={{ marginBottom: '30px' }}>
-          <div style={{ marginBottom: '15px' }}>
-            <button
-              onClick={() => setSelectedAnswers({})}
-              style={{
-                padding: '8px 14px',
-                backgroundColor: '#f3f4f6',
-                color: '#374151',
-                border: '1px solid #d1d5db',
-                borderRadius: '4px',
-                cursor: 'pointer',
-              }}
-            >
-              Reset Answers
+        <div className="quiz-study">
+          <div className="quiz-progress">
+            Question {safeQuizIndex + 1} of {quizQuestions.length}
+          </div>
+          <div className="quiz-card-layout">
+            <button className="card-arrow" onClick={showPreviousQuizQuestion} aria-label="Previous quiz question">
+              {'<'}
+            </button>
+            <div className="quiz-study-card">
+              <p className="quiz-question">{currentQuizQuestion.question}</p>
+              <div className="quiz-choice-grid">
+                {currentQuizQuestion.choices?.map((choice, choiceIndex) => (
+                  <button
+                    key={`${choice}-${choiceIndex}`}
+                    type="button"
+                    onClick={() =>
+                      setSelectedAnswers((answers) => ({
+                        ...answers,
+                        [safeQuizIndex]: choiceIndex,
+                      }))
+                    }
+                    className={
+                      selectedAnswers[safeQuizIndex] === choiceIndex
+                        ? choiceIndex === currentQuizQuestion.answerIndex
+                          ? 'quiz-choice quiz-choice-correct'
+                          : 'quiz-choice quiz-choice-incorrect'
+                        : 'quiz-choice'
+                    }
+                  >
+                    {String.fromCharCode(65 + choiceIndex)}. {choice}
+                  </button>
+                ))}
+              </div>
+              {selectedAnswers[safeQuizIndex] !== undefined && (
+                <div
+                  className={
+                    selectedAnswers[safeQuizIndex] === currentQuizQuestion.answerIndex
+                      ? 'quiz-feedback quiz-feedback-correct'
+                      : 'quiz-feedback quiz-feedback-incorrect'
+                  }
+                >
+                  <strong>
+                    {selectedAnswers[safeQuizIndex] === currentQuizQuestion.answerIndex ? 'Correct!' : 'Incorrect.'}
+                  </strong>
+                  <p>
+                    Answer: {String.fromCharCode(65 + currentQuizQuestion.answerIndex)} - {currentQuizQuestion.explanation}
+                  </p>
+                </div>
+              )}
+            </div>
+            <button className="card-arrow" onClick={showNextQuizQuestion} aria-label="Next quiz question">
+              {'>'}
             </button>
           </div>
-          <div style={{ display: 'grid', gap: '15px' }}>
-            {quizQuestions.map((item, questionIndex) => (
-              <div
-                key={`${item.question}-${questionIndex}`}
-                style={{
-                  backgroundColor: '#faf5ff',
-                  padding: '15px',
-                  borderRadius: '4px',
-                  border: '1px solid #d8b4fe',
-                }}
-              >
-                <p style={{ fontWeight: 'bold', marginTop: 0 }}>
-                  {questionIndex + 1}. {item.question}
-                </p>
-                <div style={{ display: 'grid', gap: '8px', marginBottom: '10px' }}>
-                  {item.choices?.map((choice, choiceIndex) => (
-                    <button
-                      key={`${choice}-${choiceIndex}`}
-                      type="button"
-                      onClick={() =>
-                        setSelectedAnswers((answers) => ({
-                          ...answers,
-                          [questionIndex]: choiceIndex,
-                        }))
-                      }
-                      style={{
-                        padding: '10px',
-                        textAlign: 'left',
-                        backgroundColor:
-                          selectedAnswers[questionIndex] === choiceIndex
-                            ? choiceIndex === item.answerIndex
-                              ? '#dcfce7'
-                              : '#fee2e2'
-                            : 'white',
-                        color: '#374151',
-                        border:
-                          selectedAnswers[questionIndex] === choiceIndex
-                            ? choiceIndex === item.answerIndex
-                              ? '2px solid #16a34a'
-                              : '2px solid #dc2626'
-                            : '1px solid #d1d5db',
-                        borderRadius: '4px',
-                        cursor: 'pointer',
-                        fontWeight: selectedAnswers[questionIndex] === choiceIndex ? 'bold' : 'normal',
-                      }}
-                    >
-                      {String.fromCharCode(65 + choiceIndex)}. {choice}
-                    </button>
-                  ))}
-                </div>
-                {selectedAnswers[questionIndex] !== undefined && (
-                  <div
-                    style={{
-                      padding: '10px',
-                      borderRadius: '4px',
-                      backgroundColor:
-                        selectedAnswers[questionIndex] === item.answerIndex ? '#f0fdf4' : '#fef2f2',
-                      color: selectedAnswers[questionIndex] === item.answerIndex ? '#166534' : '#991b1b',
-                    }}
-                  >
-                    <strong>
-                      {selectedAnswers[questionIndex] === item.answerIndex ? 'Correct!' : 'Incorrect.'}
-                    </strong>
-                    <p style={{ margin: '6px 0 0 0' }}>
-                      Answer: {String.fromCharCode(65 + item.answerIndex)} - {item.explanation}
-                    </p>
-                  </div>
-                )}
-              </div>
-            ))}
+          <div className="quiz-actions">
+            <button className="btn btn-muted" onClick={() => setSelectedAnswers({})}>
+              Reset Answers
+            </button>
           </div>
           <div
             style={{
