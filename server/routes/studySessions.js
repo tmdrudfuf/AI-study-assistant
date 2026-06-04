@@ -167,6 +167,19 @@ function shuffleChoices(question) {
   };
 }
 
+function getFlashcardsByLanguage(session, languageCode) {
+  const flashcards = session.flashcards_json || {};
+  const languageCards = flashcards[languageCode] || { cards: [] };
+
+  return {
+    ...flashcards,
+    [languageCode]: {
+      ...languageCards,
+      cards: Array.isArray(languageCards.cards) ? languageCards.cards : [],
+    },
+  };
+}
+
 // AI 요약 생성
 router.post('/:id/summarize', async (req, res) => {
   const { id } = req.params;
@@ -375,6 +388,138 @@ ${text}`,
     console.error('Failed to generate flashcards:', error);
     res.status(500).json({
       error: 'Failed to generate flashcards',
+      detail: error.message || 'Unknown error',
+    });
+  }
+});
+
+// Manual flashcard creation
+router.post('/:id/flashcards/manual', async (req, res) => {
+  const { id } = req.params;
+  const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
+  const { front, back } = req.body;
+
+  if (!front?.trim() || !back?.trim()) {
+    return res.status(400).json({ error: 'Front and back are required' });
+  }
+
+  try {
+    const result = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const flashcards = getFlashcardsByLanguage(result.rows[0], languageCode);
+    flashcards[languageCode].cards.push({
+      front: front.trim(),
+      back: back.trim(),
+      source: 'manual',
+    });
+
+    const updated = await db.query(
+      'UPDATE study_sessions SET flashcards_json = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [JSON.stringify(flashcards), id, req.user.userId]
+    );
+
+    res.status(201).json({ session: updated.rows[0] });
+  } catch (error) {
+    console.error('Failed to add flashcard:', error);
+    res.status(500).json({
+      error: 'Failed to add flashcard',
+      detail: error.message || 'Unknown error',
+    });
+  }
+});
+
+// Manual flashcard update
+router.put('/:id/flashcards/:language/:cardIndex', async (req, res) => {
+  const { id, cardIndex } = req.params;
+  const languageCode = req.params.language === 'en' ? 'en' : 'ko';
+  const index = Number(cardIndex);
+  const { front, back } = req.body;
+
+  if (!Number.isInteger(index) || index < 0) {
+    return res.status(400).json({ error: 'Invalid flashcard index' });
+  }
+
+  if (!front?.trim() || !back?.trim()) {
+    return res.status(400).json({ error: 'Front and back are required' });
+  }
+
+  try {
+    const result = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const flashcards = getFlashcardsByLanguage(result.rows[0], languageCode);
+    if (!flashcards[languageCode].cards[index]) {
+      return res.status(404).json({ error: 'Flashcard not found' });
+    }
+
+    flashcards[languageCode].cards[index] = {
+      ...flashcards[languageCode].cards[index],
+      front: front.trim(),
+      back: back.trim(),
+    };
+
+    const updated = await db.query(
+      'UPDATE study_sessions SET flashcards_json = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [JSON.stringify(flashcards), id, req.user.userId]
+    );
+
+    res.json({ session: updated.rows[0] });
+  } catch (error) {
+    console.error('Failed to update flashcard:', error);
+    res.status(500).json({
+      error: 'Failed to update flashcard',
+      detail: error.message || 'Unknown error',
+    });
+  }
+});
+
+// Manual flashcard delete
+router.delete('/:id/flashcards/:language/:cardIndex', async (req, res) => {
+  const { id, cardIndex } = req.params;
+  const languageCode = req.params.language === 'en' ? 'en' : 'ko';
+  const index = Number(cardIndex);
+
+  if (!Number.isInteger(index) || index < 0) {
+    return res.status(400).json({ error: 'Invalid flashcard index' });
+  }
+
+  try {
+    const result = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const flashcards = getFlashcardsByLanguage(result.rows[0], languageCode);
+    if (!flashcards[languageCode].cards[index]) {
+      return res.status(404).json({ error: 'Flashcard not found' });
+    }
+
+    flashcards[languageCode].cards.splice(index, 1);
+
+    const updated = await db.query(
+      'UPDATE study_sessions SET flashcards_json = $1 WHERE id = $2 AND user_id = $3 RETURNING *',
+      [JSON.stringify(flashcards), id, req.user.userId]
+    );
+
+    res.json({ session: updated.rows[0] });
+  } catch (error) {
+    console.error('Failed to delete flashcard:', error);
+    res.status(500).json({
+      error: 'Failed to delete flashcard',
       detail: error.message || 'Unknown error',
     });
   }

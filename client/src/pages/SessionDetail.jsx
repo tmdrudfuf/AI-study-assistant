@@ -20,6 +20,15 @@ export default function SessionDetail() {
   const [selectedAnswers, setSelectedAnswers] = useState({});
   const [flippedFlashcards, setFlippedFlashcards] = useState({});
   const [activeTab, setActiveTab] = useState('text');
+  const [flashcardMode, setFlashcardMode] = useState('study');
+  const [flashcardLanguage, setFlashcardLanguage] = useState('ko');
+  const [currentFlashcardIndex, setCurrentFlashcardIndex] = useState(0);
+  const [studyCardFlipped, setStudyCardFlipped] = useState(false);
+  const [newFlashcards, setNewFlashcards] = useState({
+    ko: { front: '', back: '' },
+    en: { front: '', back: '' },
+  });
+  const [editingFlashcard, setEditingFlashcard] = useState(null);
 
   useEffect(() => {
     if (!token) {
@@ -173,12 +182,117 @@ export default function SessionDetail() {
       setSession(data.session);
       setFlippedFlashcards({});
       setActiveTab('flashcards');
+      setFlashcardLanguage(language);
+      setFlashcardMode('study');
+      setCurrentFlashcardIndex(0);
+      setStudyCardFlipped(false);
       setError('');
       alert('Flashcards generated.');
     } catch (err) {
       setError(`Error: ${err.message}`);
     } finally {
       setGeneratingFlashcards(false);
+    }
+  };
+
+  const handleManualFlashcardChange = (language, field, value) => {
+    setNewFlashcards((cards) => ({
+      ...cards,
+      [language]: {
+        ...cards[language],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleAddFlashcard = async (language) => {
+    const card = newFlashcards[language];
+
+    try {
+      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/flashcards/manual`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ language, front: card.front, back: card.back }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || 'Failed to add flashcard.');
+      }
+
+      setSession(data.session);
+      setFlashcardLanguage(language);
+      setFlashcardMode('edit');
+      setNewFlashcards((cards) => ({
+        ...cards,
+        [language]: { front: '', back: '' },
+      }));
+      setError('');
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    }
+  };
+
+  const handleSaveFlashcard = async () => {
+    if (!editingFlashcard) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:4000/api/study-sessions/${id}/flashcards/${editingFlashcard.language}/${editingFlashcard.index}`,
+        {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            front: editingFlashcard.front,
+            back: editingFlashcard.back,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || 'Failed to update flashcard.');
+      }
+
+      setSession(data.session);
+      setEditingFlashcard(null);
+      setFlashcardMode('edit');
+      setError('');
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    }
+  };
+
+  const handleDeleteFlashcard = async (language, index) => {
+    if (!window.confirm('Delete this flashcard?')) return;
+
+    try {
+      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/flashcards/${language}/${index}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || 'Failed to delete flashcard.');
+      }
+
+      setSession(data.session);
+      setEditingFlashcard(null);
+      setFlippedFlashcards({});
+      setCurrentFlashcardIndex(0);
+      setStudyCardFlipped(false);
+      setError('');
+    } catch (err) {
+      setError(`Error: ${err.message}`);
     }
   };
 
@@ -231,6 +345,11 @@ export default function SessionDetail() {
   const unansweredCount = quizQuestions.length - answeredCount;
   const flashcardsKo = session?.flashcards_json?.ko?.cards || [];
   const flashcardsEn = session?.flashcards_json?.en?.cards || [];
+  const activeFlashcards = flashcardLanguage === 'en' ? flashcardsEn : flashcardsKo;
+  const safeFlashcardIndex = activeFlashcards.length
+    ? Math.min(currentFlashcardIndex, activeFlashcards.length - 1)
+    : 0;
+  const currentFlashcard = activeFlashcards[safeFlashcardIndex];
 
   const toggleFlashcard = (language, index) => {
     const cardKey = `${language}-${index}`;
@@ -239,6 +358,138 @@ export default function SessionDetail() {
       [cardKey]: !cards[cardKey],
     }));
   };
+
+  const handleFlashcardLanguageChange = (language) => {
+    setFlashcardLanguage(language);
+    setCurrentFlashcardIndex(0);
+    setStudyCardFlipped(false);
+  };
+
+  const showPreviousFlashcard = () => {
+    if (!activeFlashcards.length) return;
+    setCurrentFlashcardIndex((index) => (index === 0 ? activeFlashcards.length - 1 : index - 1));
+    setStudyCardFlipped(false);
+  };
+
+  const showNextFlashcard = () => {
+    if (!activeFlashcards.length) return;
+    setCurrentFlashcardIndex((index) => (index + 1) % activeFlashcards.length);
+    setStudyCardFlipped(false);
+  };
+
+  const renderFlashcardSection = (language, title, cards) => (
+    <div className="flashcard-section">
+      <div className="flashcard-section-header">
+        <h4>{title}</h4>
+        <span>{cards.length} cards</span>
+      </div>
+
+      <div className="manual-card-form">
+        <input
+          value={newFlashcards[language].front}
+          onChange={(event) => handleManualFlashcardChange(language, 'front', event.target.value)}
+          placeholder="Front"
+        />
+        <input
+          value={newFlashcards[language].back}
+          onChange={(event) => handleManualFlashcardChange(language, 'back', event.target.value)}
+          placeholder="Back"
+        />
+        <button
+          className="btn btn-amber"
+          onClick={() => handleAddFlashcard(language)}
+          disabled={!newFlashcards[language].front.trim() || !newFlashcards[language].back.trim()}
+        >
+          Add Card
+        </button>
+      </div>
+
+      {cards.length === 0 ? (
+        <p className="subtle-text">No cards yet. Add one manually or generate cards with AI.</p>
+      ) : (
+        <div className="flashcard-grid">
+          {cards.map((card, index) => {
+            const cardKey = `${language}-${index}`;
+            const isFlipped = Boolean(flippedFlashcards[cardKey]);
+            const isEditing =
+              editingFlashcard?.language === language && editingFlashcard?.index === index;
+
+            return (
+              <div className="flashcard-shell" key={cardKey}>
+                {isEditing ? (
+                  <div className="flashcard-edit-form">
+                    <label>Front</label>
+                    <textarea
+                      value={editingFlashcard.front}
+                      onChange={(event) =>
+                        setEditingFlashcard((current) => ({
+                          ...current,
+                          front: event.target.value,
+                        }))
+                      }
+                      rows="3"
+                    />
+                    <label>Back</label>
+                    <textarea
+                      value={editingFlashcard.back}
+                      onChange={(event) =>
+                        setEditingFlashcard((current) => ({
+                          ...current,
+                          back: event.target.value,
+                        }))
+                      }
+                      rows="4"
+                    />
+                    <div className="action-row">
+                      <button
+                        className="btn btn-green"
+                        onClick={handleSaveFlashcard}
+                        disabled={!editingFlashcard.front.trim() || !editingFlashcard.back.trim()}
+                      >
+                        Save
+                      </button>
+                      <button className="btn btn-muted" onClick={() => setEditingFlashcard(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => toggleFlashcard(language, index)}
+                      className="flashcard-button"
+                    >
+                      <strong>{isFlipped ? 'Back' : 'Front'}</strong>
+                      <p>{isFlipped ? card.back : card.front}</p>
+                    </button>
+                    <div className="flashcard-actions">
+                      <button
+                        className="mini-button"
+                        onClick={() =>
+                          setEditingFlashcard({
+                            language,
+                            index,
+                            front: card.front || '',
+                            back: card.back || '',
+                          })
+                        }
+                      >
+                        Edit
+                      </button>
+                      <button className="mini-button mini-button-danger" onClick={() => handleDeleteFlashcard(language, index)}>
+                        Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 
   if (loading) return <section className="page-card"><p>로딩 중...</p></section>;
 
@@ -605,84 +856,83 @@ export default function SessionDetail() {
 
       {activeTab === 'flashcards' && (
       <div style={{ marginBottom: '30px' }}>
-        {(flashcardsKo.length > 0 || flashcardsEn.length > 0) ? (
-        <div style={{ marginBottom: '30px' }}>
-          <h3 style={{ marginBottom: '10px' }}>Flashcards</h3>
+        <div className="flashcards-tab">
+          <div>
+            <h3>Flashcards</h3>
+            <p className="subtle-text">Study one card at a time, or switch to Edit to manage your cards.</p>
+          </div>
 
-          {flashcardsKo.length > 0 && (
-            <div style={{ marginBottom: '25px' }}>
-              <h4>Korean Flashcards</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                {flashcardsKo.map((card, index) => {
-                  const cardKey = `ko-${index}`;
-                  const isFlipped = Boolean(flippedFlashcards[cardKey]);
-
-                  return (
-                    <button
-                      key={cardKey}
-                      type="button"
-                      onClick={() => toggleFlashcard('ko', index)}
-                      style={{
-                        minHeight: '150px',
-                        padding: '16px',
-                        backgroundColor: isFlipped ? '#fff7ed' : '#fffbeb',
-                        color: '#1f2937',
-                        border: '1px solid #fbbf24',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        lineHeight: '1.5',
-                      }}
-                    >
-                      <strong>{isFlipped ? 'Back' : 'Front'}</strong>
-                      <p style={{ marginBottom: 0 }}>{isFlipped ? card.back : card.front}</p>
-                    </button>
-                  );
-                })}
-              </div>
+          <div className="flashcard-toolbar">
+            <div className="segmented-control">
+              <button
+                className={flashcardMode === 'study' ? 'segment-button segment-button-active' : 'segment-button'}
+                onClick={() => setFlashcardMode('study')}
+              >
+                Study
+              </button>
+              <button
+                className={flashcardMode === 'edit' ? 'segment-button segment-button-active' : 'segment-button'}
+                onClick={() => setFlashcardMode('edit')}
+              >
+                Edit
+              </button>
             </div>
-          )}
 
-          {flashcardsEn.length > 0 && (
-            <div>
-              <h4>English Flashcards</h4>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' }}>
-                {flashcardsEn.map((card, index) => {
-                  const cardKey = `en-${index}`;
-                  const isFlipped = Boolean(flippedFlashcards[cardKey]);
-
-                  return (
-                    <button
-                      key={cardKey}
-                      type="button"
-                      onClick={() => toggleFlashcard('en', index)}
-                      style={{
-                        minHeight: '150px',
-                        padding: '16px',
-                        backgroundColor: isFlipped ? '#fff7ed' : '#fffbeb',
-                        color: '#1f2937',
-                        border: '1px solid #fbbf24',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        lineHeight: '1.5',
-                      }}
-                    >
-                      <strong>{isFlipped ? 'Back' : 'Front'}</strong>
-                      <p style={{ marginBottom: 0 }}>{isFlipped ? card.back : card.front}</p>
-                    </button>
-                  );
-                })}
-              </div>
+            <div className="segmented-control">
+              <button
+                className={flashcardLanguage === 'ko' ? 'segment-button segment-button-active' : 'segment-button'}
+                onClick={() => handleFlashcardLanguageChange('ko')}
+              >
+                Korean
+              </button>
+              <button
+                className={flashcardLanguage === 'en' ? 'segment-button segment-button-active' : 'segment-button'}
+                onClick={() => handleFlashcardLanguageChange('en')}
+              >
+                English
+              </button>
             </div>
+          </div>
+
+          {flashcardMode === 'study' ? (
+            <div className="flashcard-study">
+              {currentFlashcard ? (
+                <>
+                  <div className="flashcard-progress">
+                    Card {safeFlashcardIndex + 1} of {activeFlashcards.length}
+                  </div>
+                  <div className="study-card-layout">
+                    <button className="card-arrow" onClick={showPreviousFlashcard} aria-label="Previous flashcard">
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      className="study-card"
+                      onClick={() => setStudyCardFlipped((flipped) => !flipped)}
+                    >
+                      <span>{studyCardFlipped ? 'Back' : 'Front'}</span>
+                      <p>{studyCardFlipped ? currentFlashcard.back : currentFlashcard.front}</p>
+                    </button>
+                    <button className="card-arrow" onClick={showNextFlashcard} aria-label="Next flashcard">
+                      ›
+                    </button>
+                  </div>
+                  <p className="subtle-text">Click the card to flip it.</p>
+                </>
+              ) : (
+                <div className="empty-state">
+                  <h3>No cards yet</h3>
+                  <p>Switch to Edit to add cards manually, or use the AI Tools panel to generate flashcards.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {renderFlashcardSection('ko', 'Korean Flashcards', flashcardsKo)}
+              {renderFlashcardSection('en', 'English Flashcards', flashcardsEn)}
+            </>
           )}
         </div>
-        ) : (
-          <div className="empty-state">
-            <h3>Flashcards</h3>
-            <p>No flashcards yet. Use the AI Tools panel to generate Korean or English flashcards.</p>
-          </div>
-        )}
       </div>
       )}
 
