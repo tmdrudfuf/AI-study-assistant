@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../App';
+import { API_URL } from '../api';
 
 export default function Home() {
   const { token, user } = useAuth();
@@ -16,7 +17,7 @@ export default function Home() {
     const fetchSessions = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:4000/api/study-sessions', {
+        const response = await fetch(`${API_URL}/api/study-sessions`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },

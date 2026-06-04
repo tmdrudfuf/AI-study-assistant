@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
+import { API_URL } from '../api';
 
 export default function StudySession() {
   const [title, setTitle] = useState('');
@@ -32,7 +33,7 @@ export default function StudySession() {
     setMessage('');
 
     try {
-      const response = await fetch('http://localhost:4000/api/study-sessions', {
+      const response = await fetch(`${API_URL}/api/study-sessions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

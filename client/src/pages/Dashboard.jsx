@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
+import { API_URL } from '../api';
 
 export default function Dashboard() {
   const [sessions, setSessions] = useState([]);
@@ -21,7 +22,7 @@ export default function Dashboard() {
     const fetchSessions = async () => {
       try {
         setLoading(true);
-        const response = await fetch('http://localhost:4000/api/study-sessions', {
+        const response = await fetch(`${API_URL}/api/study-sessions`, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',

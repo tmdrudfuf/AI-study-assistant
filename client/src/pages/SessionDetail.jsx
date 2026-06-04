@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../App';
+import { API_URL } from '../api';
 
 export default function SessionDetail() {
   const { id } = useParams();
@@ -40,7 +41,7 @@ export default function SessionDetail() {
     const fetchSession = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:4000/api/study-sessions/${id}`, {
+        const response = await fetch(`${API_URL}/api/study-sessions/${id}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
           },
@@ -73,7 +74,7 @@ export default function SessionDetail() {
 
     setSavingChanges(true);
     try {
-      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}`, {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -106,7 +107,7 @@ export default function SessionDetail() {
   const handleGenerateSummary = async (language) => {
     setGeneratingSummary(true);
     try {
-      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/summarize`, {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}/summarize`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -135,7 +136,7 @@ export default function SessionDetail() {
   const handleGenerateQuiz = async (language) => {
     setGeneratingQuiz(true);
     try {
-      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/quiz`, {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}/quiz`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -166,7 +167,7 @@ export default function SessionDetail() {
   const handleGenerateFlashcards = async (language) => {
     setGeneratingFlashcards(true);
     try {
-      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/flashcards`, {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}/flashcards`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -211,7 +212,7 @@ export default function SessionDetail() {
     const card = newFlashcards[language];
 
     try {
-      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/flashcards/manual`, {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}/flashcards/manual`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -243,7 +244,7 @@ export default function SessionDetail() {
 
     try {
       const response = await fetch(
-        `http://localhost:4000/api/study-sessions/${id}/flashcards/${editingFlashcard.language}/${editingFlashcard.index}`,
+        `${API_URL}/api/study-sessions/${id}/flashcards/${editingFlashcard.language}/${editingFlashcard.index}`,
         {
           method: 'PUT',
           headers: {
@@ -275,7 +276,7 @@ export default function SessionDetail() {
     if (!window.confirm('Delete this flashcard?')) return;
 
     try {
-      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}/flashcards/${language}/${index}`, {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}/flashcards/${language}/${index}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -304,7 +305,7 @@ export default function SessionDetail() {
     }
 
     try {
-      const response = await fetch(`http://localhost:4000/api/study-sessions/${id}`, {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
