@@ -2,14 +2,24 @@ const db = require('./db');
 
 const userId = Number(process.argv[2] || 1);
 
+function getDateAfter(days) {
+  const date = new Date();
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 const sessions = [
   {
     title: 'test1 (Biology)',
+    subject: 'Biology',
+    due_date: getDateAfter(1),
     original_text:
       'Photosynthesis converts light energy into chemical energy in plants. Chlorophyll captures sunlight, and plants use carbon dioxide and water to produce glucose and oxygen.',
   },
   {
     title: 'test2 (Chemistry)',
+    subject: 'Chemistry',
+    due_date: getDateAfter(3),
     original_text:
       'Atoms are the basic units of matter. They contain protons, neutrons, and electrons. Chemical bonds form when atoms share or transfer electrons.',
     summary:
@@ -17,6 +27,8 @@ const sessions = [
   },
   {
     title: 'test3 (History)',
+    subject: 'History',
+    due_date: getDateAfter(7),
     original_text:
       'The Industrial Revolution changed production by introducing machines, factories, and new energy sources. It affected labor, cities, transportation, and global trade.',
     quiz_json: {
@@ -32,6 +44,8 @@ const sessions = [
   },
   {
     title: 'test4 (Math)',
+    subject: 'Math',
+    due_date: getDateAfter(14),
     original_text:
       'Linear equations describe relationships with a constant rate of change. Their graphs form straight lines, and slope measures how quickly y changes as x changes.',
     flashcards_json: {
@@ -47,6 +61,8 @@ const sessions = [
   },
   {
     title: 'test5 (Earth Science)',
+    subject: 'Earth Science',
+    due_date: getDateAfter(21),
     original_text:
       'The water cycle moves water through evaporation, condensation, precipitation, runoff, and infiltration. It supports ecosystems and provides fresh water.',
     summary:
@@ -78,11 +94,13 @@ async function seed() {
   for (const session of sessions) {
     await db.query(
       `INSERT INTO study_sessions
-        (user_id, title, original_text, summary, summary_en, quiz_json, flashcards_json)
-       VALUES ($1, $2, $3, $4, $4, $5, $6)`,
+        (user_id, title, subject, due_date, original_text, summary, summary_en, quiz_json, flashcards_json)
+       VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8)`,
       [
         userId,
         session.title,
+        session.subject,
+        session.due_date,
         session.original_text,
         session.summary || null,
         session.quiz_json ? JSON.stringify(session.quiz_json) : null,

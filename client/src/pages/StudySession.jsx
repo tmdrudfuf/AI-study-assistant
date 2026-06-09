@@ -5,6 +5,8 @@ import { API_URL } from '../api';
 
 export default function StudySession() {
   const [title, setTitle] = useState('');
+  const [subject, setSubject] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
@@ -41,6 +43,8 @@ export default function StudySession() {
         },
         body: JSON.stringify({
           title,
+          subject,
+          due_date: dueDate || null,
           original_text: text,
         }),
       });
@@ -68,7 +72,7 @@ export default function StudySession() {
         </div>
       </div>
 
-      {message && <p style={{ color: 'red' }}>{message}</p>}
+      {message && <p className="message message-error">{message}</p>}
 
       <form className="create-session-layout" onSubmit={handleSaveSession}>
         <div className="create-session-main">
@@ -79,6 +83,25 @@ export default function StudySession() {
               onChange={(event) => setTitle(event.target.value)}
               type="text"
               placeholder="Example: The Water Cycle"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Subject</label>
+            <input
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              type="text"
+              placeholder="Example: Biology, Math, History"
+            />
+          </div>
+
+          <div className="form-group">
+            <label>Due Date</label>
+            <input
+              value={dueDate}
+              onChange={(event) => setDueDate(event.target.value)}
+              type="date"
             />
           </div>
 

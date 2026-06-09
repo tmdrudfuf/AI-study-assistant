@@ -56,8 +56,8 @@ export default function Login() {
         <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
         <button type="submit">Login</button>
       </form>
-      {error && <p style={{ color: 'red' }}>{error}</p>}
-      {message && <p style={{ color: 'green' }}>{message}</p>}
+      {error && <p className="message message-error">{error}</p>}
+      {message && <p className="message message-success">{message}</p>}
     </section>
   );
 }

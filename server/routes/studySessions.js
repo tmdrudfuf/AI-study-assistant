@@ -4,6 +4,52 @@ const OpenAI = require('openai');
 const db = require('../db');
 
 const router = express.Router();
+const aiRequestBuckets = new Map();
+
+function limitAiRequests(req, res, next) {
+  const maxRequests = Number(process.env.AI_RATE_LIMIT_MAX || 20);
+  const windowMs = Number(process.env.AI_RATE_LIMIT_WINDOW_MS || 60 * 60 * 1000);
+  const now = Date.now();
+  const key = String(req.user.userId);
+  const currentBucket = aiRequestBuckets.get(key);
+  const bucket =
+    currentBucket && now - currentBucket.startedAt < windowMs
+      ? currentBucket
+      : { startedAt: now, count: 0 };
+
+  if (bucket.count >= maxRequests) {
+    const retryAfterSeconds = Math.max(1, Math.ceil((bucket.startedAt + windowMs - now) / 1000));
+    res.set('Retry-After', String(retryAfterSeconds));
+    return res.status(429).json({
+      error: 'AI request limit reached',
+      detail: `Try again in ${retryAfterSeconds} seconds.`,
+    });
+  }
+
+  bucket.count += 1;
+  aiRequestBuckets.set(key, bucket);
+  next();
+}
+
+function validateAiInput(text) {
+  const maxCharacters = Number(process.env.AI_MAX_INPUT_CHARS || 50000);
+
+  if (!text || !text.trim()) {
+    return 'Original text is required.';
+  }
+  if (text.length > maxCharacters) {
+    return `Original text must be ${maxCharacters.toLocaleString()} characters or fewer.`;
+  }
+  return null;
+}
+
+function getAnnotations(session) {
+  return Array.isArray(session.annotations_json) ? session.annotations_json : [];
+}
+
+function removeAnnotationsForTarget(annotations, target) {
+  return annotations.filter((annotation) => (annotation.target || 'original_text') !== target);
+}
 
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -38,13 +84,22 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { title, original_text, summary, quiz_json, flashcards_json } = req.body;
+  const { title, subject, due_date, original_text, summary, quiz_json, flashcards_json } = req.body;
   try {
     const result = await db.query(
-      `INSERT INTO study_sessions (user_id, title, original_text, summary, quiz_json, flashcards_json)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO study_sessions (user_id, title, subject, due_date, original_text, summary, quiz_json, flashcards_json)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
-      [req.user.userId, title, original_text, summary, quiz_json || null, flashcards_json || null]
+      [
+        req.user.userId,
+        title,
+        subject || null,
+        due_date || null,
+        original_text,
+        summary,
+        quiz_json || null,
+        flashcards_json || null,
+      ]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -74,23 +129,58 @@ router.get('/:id', async (req, res) => {
 // Update a session.
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, original_text, summary, summary_ko, summary_en } = req.body;
+  const { title, subject, due_date, original_text, summary, summary_ko, summary_en, annotations_json } = req.body;
+  const hasDueDate = Object.prototype.hasOwnProperty.call(req.body, 'due_date');
+  const hasAnnotations = Object.prototype.hasOwnProperty.call(req.body, 'annotations_json');
   try {
+    const existingResult = await db.query(
+      'SELECT * FROM study_sessions WHERE id = $1 AND user_id = $2',
+      [id, req.user.userId]
+    );
+    if (existingResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const existingSession = existingResult.rows[0];
+    let nextAnnotations = hasAnnotations && Array.isArray(annotations_json)
+      ? annotations_json
+      : getAnnotations(existingSession);
+
+    if (original_text !== undefined && original_text !== existingSession.original_text) {
+      nextAnnotations = removeAnnotationsForTarget(nextAnnotations, 'original_text');
+    }
+    if (
+      (summary_ko !== undefined && summary_ko !== existingSession.summary_ko) ||
+      (summary !== undefined && summary !== existingSession.summary)
+    ) {
+      nextAnnotations = removeAnnotationsForTarget(nextAnnotations, 'summary_ko');
+    }
+    if (summary_en !== undefined && summary_en !== existingSession.summary_en) {
+      nextAnnotations = removeAnnotationsForTarget(nextAnnotations, 'summary_en');
+    }
+
     const result = await db.query(
       `UPDATE study_sessions 
        SET title = COALESCE($1, title), 
-           original_text = COALESCE($2, original_text),
-           summary = COALESCE($3, summary),
-           summary_ko = COALESCE($4, summary_ko),
-           summary_en = COALESCE($5, summary_en)
-       WHERE id = $6 AND user_id = $7
+           subject = COALESCE($2, subject),
+           due_date = CASE WHEN $3 THEN $4 ELSE due_date END,
+           original_text = COALESCE($5, original_text),
+           summary = COALESCE($6, summary),
+           summary_ko = COALESCE($7, summary_ko),
+           summary_en = COALESCE($8, summary_en),
+           annotations_json = $9
+       WHERE id = $10 AND user_id = $11
        RETURNING *`,
       [
         title || null,
+        subject || null,
+        hasDueDate,
+        due_date || null,
         original_text || null,
         summary || null,
         summary_ko || null,
         summary_en || null,
+        JSON.stringify(nextAnnotations),
         id,
         req.user.userId,
       ]
@@ -203,7 +293,7 @@ function getQuizzesByLanguage(session, languageCode) {
 }
 
 // AI summary generation
-router.post('/:id/summarize', async (req, res) => {
+router.post('/:id/summarize', limitAiRequests, async (req, res) => {
   const { id } = req.params;
   const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
   const language = languageCode === 'en' ? 'English' : 'Korean';
@@ -218,8 +308,9 @@ router.post('/:id/summarize', async (req, res) => {
 
     const text = session.rows[0].original_text;
 
-    if (!text || !text.trim()) {
-      return res.status(400).json({ error: 'Original text is required to generate a summary' });
+    const inputError = validateAiInput(text);
+    if (inputError) {
+      return res.status(400).json({ error: inputError });
     }
 
     const openai = getOpenAIClient();
@@ -246,9 +337,17 @@ ${text}`,
 
     // Store the summary by language.
     const summaryColumn = languageCode === 'en' ? 'summary_en' : 'summary_ko';
+    const annotationTarget = languageCode === 'en' ? 'summary_en' : 'summary_ko';
+    const nextAnnotations = removeAnnotationsForTarget(
+      getAnnotations(session.rows[0]),
+      annotationTarget
+    );
     const updated = await db.query(
-      `UPDATE study_sessions SET ${summaryColumn} = $1, summary = $1 WHERE id = $2 AND user_id = $3 RETURNING *`,
-      [summary, id, req.user.userId]
+      `UPDATE study_sessions
+       SET ${summaryColumn} = $1, summary = $1, annotations_json = $2
+       WHERE id = $3 AND user_id = $4
+       RETURNING *`,
+      [summary, JSON.stringify(nextAnnotations), id, req.user.userId]
     );
 
     res.json({ summary, session: updated.rows[0] });
@@ -262,7 +361,7 @@ ${text}`,
 });
 
 // AI quiz generation
-router.post('/:id/quiz', async (req, res) => {
+router.post('/:id/quiz', limitAiRequests, async (req, res) => {
   const { id } = req.params;
   const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
   const language = languageCode === 'en' ? 'English' : 'Korean';
@@ -278,8 +377,9 @@ router.post('/:id/quiz', async (req, res) => {
     const currentSession = session.rows[0];
     const text = currentSession.original_text;
 
-    if (!text || !text.trim()) {
-      return res.status(400).json({ error: 'Original text is required to generate a quiz' });
+    const inputError = validateAiInput(text);
+    if (inputError) {
+      return res.status(400).json({ error: inputError });
     }
 
     const openai = getOpenAIClient();
@@ -343,7 +443,7 @@ ${text}`,
 });
 
 // AI flashcards generation
-router.post('/:id/flashcards', async (req, res) => {
+router.post('/:id/flashcards', limitAiRequests, async (req, res) => {
   const { id } = req.params;
   const languageCode = req.body?.language === 'en' ? 'en' : 'ko';
   const language = languageCode === 'en' ? 'English' : 'Korean';
@@ -360,8 +460,9 @@ router.post('/:id/flashcards', async (req, res) => {
     const currentSession = session.rows[0];
     const text = currentSession.original_text;
 
-    if (!text || !text.trim()) {
-      return res.status(400).json({ error: 'Original text is required to generate flashcards' });
+    const inputError = validateAiInput(text);
+    if (inputError) {
+      return res.status(400).json({ error: inputError });
     }
 
     const openai = getOpenAIClient();

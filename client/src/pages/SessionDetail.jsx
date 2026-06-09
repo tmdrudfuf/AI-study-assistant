@@ -13,10 +13,19 @@ export default function SessionDetail() {
   const [error, setError] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState('');
+  const [editSubject, setEditSubject] = useState('');
+  const [editDueDate, setEditDueDate] = useState('');
   const [editText, setEditText] = useState('');
+  const [annotations, setAnnotations] = useState([]);
+  const [selectionRange, setSelectionRange] = useState(null);
+  const [selectionMenuPosition, setSelectionMenuPosition] = useState(null);
+  const [commentDraft, setCommentDraft] = useState('');
+  const [showCommentInput, setShowCommentInput] = useState(false);
+  const [openAnnotation, setOpenAnnotation] = useState(null);
   const [editingSummaryLanguage, setEditingSummaryLanguage] = useState(null);
   const [editSummaryText, setEditSummaryText] = useState('');
   const [savingChanges, setSavingChanges] = useState(false);
+  const [savingAnnotations, setSavingAnnotations] = useState(false);
   const [generatingSummary, setGeneratingSummary] = useState(false);
   const [generatingQuiz, setGeneratingQuiz] = useState(false);
   const [generatingFlashcards, setGeneratingFlashcards] = useState(false);
@@ -58,7 +67,10 @@ export default function SessionDetail() {
 
         setSession(data);
         setEditTitle(data.title);
+        setEditSubject(data.subject || '');
+        setEditDueDate(data.due_date ? data.due_date.slice(0, 10) : '');
         setEditText(data.original_text);
+        setAnnotations(Array.isArray(data.annotations_json) ? data.annotations_json : []);
       } catch (err) {
         setError(`Error: ${err.message}`);
       } finally {
@@ -75,6 +87,22 @@ export default function SessionDetail() {
       return;
     }
 
+    const originalTextChanged = editText !== session.original_text;
+    const hasOriginalTextAnnotations = annotations.some(
+      (annotation) => (annotation.target || 'original_text') === 'original_text'
+    );
+    if (
+      originalTextChanged &&
+      hasOriginalTextAnnotations &&
+      !window.confirm('Changing the original text will remove its highlights and comments. Continue?')
+    ) {
+      return;
+    }
+
+    const nextAnnotations = originalTextChanged
+      ? annotations.filter((annotation) => (annotation.target || 'original_text') !== 'original_text')
+      : annotations;
+
     setSavingChanges(true);
     try {
       const response = await fetch(`${API_URL}/api/study-sessions/${id}`, {
@@ -85,7 +113,10 @@ export default function SessionDetail() {
         },
         body: JSON.stringify({
           title: editTitle,
+          subject: editSubject,
+          due_date: editDueDate || null,
           original_text: editText,
+          annotations_json: nextAnnotations,
         }),
       });
 
@@ -96,6 +127,8 @@ export default function SessionDetail() {
       }
 
       setSession(data);
+      setAnnotations(Array.isArray(data.annotations_json) ? data.annotations_json : []);
+      setOpenAnnotation(null);
       setIsEditing(false);
       setError('');
       // Show success feedback.
@@ -105,6 +138,169 @@ export default function SessionDetail() {
     } finally {
       setSavingChanges(false);
     }
+  };
+
+  const getNodeTextOffset = (container, targetNode, targetOffset) => {
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    let offset = 0;
+    let currentNode = walker.nextNode();
+
+    while (currentNode) {
+      if (currentNode === targetNode) {
+        return offset + targetOffset;
+      }
+      offset += currentNode.textContent.length;
+      currentNode = walker.nextNode();
+    }
+
+    return offset;
+  };
+
+  const handleTextSelection = (containerId, text, target) => {
+    const selection = window.getSelection();
+    const container = document.getElementById(containerId);
+
+    if (!selection || !container || selection.rangeCount === 0 || selection.isCollapsed) {
+      setSelectionRange(null);
+      setSelectionMenuPosition(null);
+      setShowCommentInput(false);
+      return;
+    }
+
+    const range = selection.getRangeAt(0);
+    if (!container.contains(range.startContainer) || !container.contains(range.endContainer)) {
+      setSelectionRange(null);
+      setSelectionMenuPosition(null);
+      setShowCommentInput(false);
+      return;
+    }
+
+    const start = getNodeTextOffset(container, range.startContainer, range.startOffset);
+    const end = getNodeTextOffset(container, range.endContainer, range.endOffset);
+    const normalizedStart = Math.min(start, end);
+    const normalizedEnd = Math.max(start, end);
+    const selectedText = text.slice(normalizedStart, normalizedEnd).trim();
+
+    if (!selectedText) {
+      setSelectionRange(null);
+      setSelectionMenuPosition(null);
+      setShowCommentInput(false);
+      return;
+    }
+
+    const rect = range.getBoundingClientRect();
+
+    setSelectionRange({
+      start: normalizedStart,
+      end: normalizedEnd,
+      text: text.slice(normalizedStart, normalizedEnd),
+      target,
+    });
+    setCommentDraft('');
+    setShowCommentInput(false);
+    setSelectionMenuPosition({
+      top: rect.bottom + window.scrollY + 8,
+      left: Math.max(
+        window.scrollX + 12,
+        Math.min(rect.right + window.scrollX - 170, window.scrollX + window.innerWidth - 232)
+      ),
+    });
+  };
+
+  const saveAnnotations = async (nextAnnotations) => {
+    setSavingAnnotations(true);
+    try {
+      const response = await fetch(`${API_URL}/api/study-sessions/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ annotations_json: nextAnnotations }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to save annotations.');
+      }
+
+      setSession(data);
+      setAnnotations(Array.isArray(data.annotations_json) ? data.annotations_json : []);
+      setSelectionRange(null);
+      setSelectionMenuPosition(null);
+      setCommentDraft('');
+      setShowCommentInput(false);
+      window.getSelection()?.removeAllRanges();
+      setError('');
+    } catch (err) {
+      setError(`Error: ${err.message}`);
+    } finally {
+      setSavingAnnotations(false);
+    }
+  };
+
+  const addAnnotation = (type, note = '') => {
+    if (!selectionRange) return;
+
+    const nextAnnotations = [
+      ...annotations,
+      {
+        id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        type,
+        target: selectionRange.target,
+        start: selectionRange.start,
+        end: selectionRange.end,
+        text: selectionRange.text,
+        note: note.trim(),
+        color: type === 'comment' ? 'blue' : 'yellow',
+        createdAt: new Date().toISOString(),
+      },
+    ].sort((a, b) => a.start - b.start);
+
+    saveAnnotations(nextAnnotations);
+  };
+
+  const deleteAnnotation = (annotationId) => {
+    const nextAnnotations = annotations.filter((annotation) => annotation.id !== annotationId);
+    saveAnnotations(nextAnnotations);
+  };
+
+  const renderAnnotatedText = (text, target) => {
+    const validAnnotations = annotations
+      .filter((annotation) => (annotation.target || 'original_text') === target)
+      .filter((annotation) => Number.isInteger(annotation.start) && Number.isInteger(annotation.end))
+      .filter((annotation) => annotation.start >= 0 && annotation.end <= text.length && annotation.start < annotation.end);
+
+    if (validAnnotations.length === 0) return text;
+
+    const boundaries = new Set([0, text.length]);
+    validAnnotations.forEach((annotation) => {
+      boundaries.add(annotation.start);
+      boundaries.add(annotation.end);
+    });
+
+    const sortedBoundaries = [...boundaries].sort((a, b) => a - b);
+
+    return sortedBoundaries.slice(0, -1).map((start, index) => {
+      const end = sortedBoundaries[index + 1];
+      const value = text.slice(start, end);
+      const annotation = validAnnotations
+        .filter((item) => item.start <= start && item.end >= end)
+        .at(-1);
+
+      if (!annotation) return <span key={`${start}-${end}`}>{value}</span>;
+
+      return (
+        <mark
+          key={`${annotation.id}-${start}-${end}`}
+          className={annotation.type === 'comment' ? 'annotated-text annotated-comment' : 'annotated-text'}
+          title={annotation.note || annotation.text}
+          onClick={() => setOpenAnnotation(annotation)}
+        >
+          {value}
+        </mark>
+      );
+    });
   };
 
   const startEditingSummary = (language, value) => {
@@ -120,12 +316,39 @@ export default function SessionDetail() {
   const handleSaveSummary = async () => {
     if (!editingSummaryLanguage || !editSummaryText.trim()) return;
 
+    const annotationTarget = editingSummaryLanguage === 'en' ? 'summary_en' : 'summary_ko';
+    const currentSummary =
+      editingSummaryLanguage === 'en'
+        ? session.summary_en || ''
+        : session.summary_ko || session.summary || '';
+    const summaryChanged = editSummaryText !== currentSummary;
+    const hasSummaryAnnotations = annotations.some(
+      (annotation) => (annotation.target || 'original_text') === annotationTarget
+    );
+    if (
+      summaryChanged &&
+      hasSummaryAnnotations &&
+      !window.confirm('Changing this summary will remove its highlights and comments. Continue?')
+    ) {
+      return;
+    }
+
+    const nextAnnotations = summaryChanged
+      ? annotations.filter(
+          (annotation) => (annotation.target || 'original_text') !== annotationTarget
+        )
+      : annotations;
+
     setSavingChanges(true);
     try {
       const payload =
         editingSummaryLanguage === 'en'
-          ? { summary_en: editSummaryText }
-          : { summary_ko: editSummaryText, summary: editSummaryText };
+          ? { summary_en: editSummaryText, annotations_json: nextAnnotations }
+          : {
+              summary_ko: editSummaryText,
+              summary: editSummaryText,
+              annotations_json: nextAnnotations,
+            };
 
       const response = await fetch(`${API_URL}/api/study-sessions/${id}`, {
         method: 'PUT',
@@ -142,6 +365,8 @@ export default function SessionDetail() {
       }
 
       setSession(data);
+      setAnnotations(Array.isArray(data.annotations_json) ? data.annotations_json : []);
+      setOpenAnnotation(null);
       cancelEditingSummary();
       setError('');
     } catch (err) {
@@ -152,6 +377,17 @@ export default function SessionDetail() {
   };
 
   const handleGenerateSummary = async (language) => {
+    const annotationTarget = language === 'en' ? 'summary_en' : 'summary_ko';
+    const hasSummaryAnnotations = annotations.some(
+      (annotation) => (annotation.target || 'original_text') === annotationTarget
+    );
+    if (
+      hasSummaryAnnotations &&
+      !window.confirm('Generating a new summary will remove its highlights and comments. Continue?')
+    ) {
+      return;
+    }
+
     setGeneratingSummary(true);
     try {
       const response = await fetch(`${API_URL}/api/study-sessions/${id}/summarize`, {
@@ -199,6 +435,8 @@ export default function SessionDetail() {
       }
 
       setSession(data.session);
+      setAnnotations(Array.isArray(data.session.annotations_json) ? data.session.annotations_json : []);
+      setOpenAnnotation(null);
       setSelectedAnswers({});
       setActiveTab('quiz');
       setQuizLanguage(language);
@@ -387,6 +625,32 @@ export default function SessionDetail() {
     }
   };
 
+  const formatDueDate = (dateString) => {
+    if (!dateString) return 'No due date';
+    try {
+      return new Date(`${dateString.slice(0, 10)}T00:00:00`).toLocaleDateString('ko-KR', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  const getDueDateStatus = (dateString) => {
+    if (!dateString) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueDate = new Date(`${dateString.slice(0, 10)}T00:00:00`);
+    const daysLeft = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+
+    if (daysLeft < 0) return `${Math.abs(daysLeft)} days overdue`;
+    if (daysLeft === 0) return 'Due today';
+    if (daysLeft === 1) return 'Due tomorrow';
+    return `${daysLeft} days left`;
+  };
+
   const legacyQuizQuestions = session?.quiz_json?.questions || [];
   const quizQuestionsKo = session?.quiz_json?.ko?.questions || legacyQuizQuestions;
   const quizQuestionsEn = session?.quiz_json?.en?.questions || [];
@@ -449,6 +713,103 @@ export default function SessionDetail() {
     setCurrentQuizIndex((index) => (index + 1) % quizQuestions.length);
   };
 
+  const renderAnnotationMenu = () => {
+    if (!selectionRange || !selectionMenuPosition) return null;
+
+    return (
+      <div
+        className="annotation-context-menu"
+        style={{
+          top: `${selectionMenuPosition.top}px`,
+          left: `${selectionMenuPosition.left}px`,
+        }}
+      >
+        <span>{selectionRange.text.trim().slice(0, 48)}</span>
+        <button className="mini-button" onClick={() => addAnnotation('highlight')} disabled={savingAnnotations}>
+          Highlight
+        </button>
+        <button className="mini-button" onClick={() => setShowCommentInput(true)} disabled={savingAnnotations}>
+          Comment
+        </button>
+        {showCommentInput && (
+          <div className="annotation-comment-form">
+            <textarea
+              value={commentDraft}
+              onChange={(event) => setCommentDraft(event.target.value)}
+              placeholder="Write a note..."
+              rows="3"
+              autoFocus
+            />
+            <button
+              className="mini-button"
+              onClick={() => addAnnotation('comment', commentDraft)}
+              disabled={savingAnnotations || !commentDraft.trim()}
+            >
+              Save Note
+            </button>
+          </div>
+        )}
+        <button
+          className="mini-button"
+          onClick={() => {
+            setSelectionRange(null);
+            setSelectionMenuPosition(null);
+            setShowCommentInput(false);
+            setCommentDraft('');
+            window.getSelection()?.removeAllRanges();
+          }}
+        >
+          Clear
+        </button>
+      </div>
+    );
+  };
+
+  const renderAnnotationSidePanel = (target) => {
+    const targetAnnotation =
+      openAnnotation && (openAnnotation.target || 'original_text') === target ? openAnnotation : null;
+
+    return (
+      <aside className="annotation-side-panel">
+        {targetAnnotation ? (
+          <>
+            <div className="annotation-side-header">
+              <strong>{targetAnnotation.type === 'comment' ? 'Comment' : 'Highlight'}</strong>
+              <button
+                className="annotation-dialog-close"
+                onClick={() => setOpenAnnotation(null)}
+                aria-label="Close annotation"
+              >
+                X
+              </button>
+            </div>
+            <blockquote>{targetAnnotation.text}</blockquote>
+            {targetAnnotation.note ? (
+              <p>{targetAnnotation.note}</p>
+            ) : (
+              <p className="subtle-text">No comment was added to this highlight.</p>
+            )}
+            <button
+              className="mini-button mini-button-danger"
+              onClick={() => {
+                deleteAnnotation(targetAnnotation.id);
+                setOpenAnnotation(null);
+              }}
+              disabled={savingAnnotations}
+            >
+              Delete
+            </button>
+          </>
+        ) : (
+          <div className="annotation-side-empty">
+            <strong>Comments</strong>
+            <p>Click a highlighted section to view its note.</p>
+          </div>
+        )}
+      </aside>
+    );
+  };
+
   const renderFlashcardSection = (language, title, cards) => (
     <div className="flashcard-section">
       <div className="flashcard-section-header">
@@ -468,7 +829,7 @@ export default function SessionDetail() {
           placeholder="Back"
         />
         <button
-          className="btn btn-amber"
+          className="btn btn-primary"
           onClick={() => handleAddFlashcard(language)}
           disabled={!newFlashcards[language].front.trim() || !newFlashcards[language].back.trim()}
         >
@@ -514,7 +875,7 @@ export default function SessionDetail() {
                     />
                     <div className="action-row">
                       <button
-                        className="btn btn-green"
+                        className="btn btn-primary"
                         onClick={handleSaveFlashcard}
                         disabled={!editingFlashcard.front.trim() || !editingFlashcard.back.trim()}
                       >
@@ -573,66 +934,105 @@ export default function SessionDetail() {
         Back to Dashboard
       </button>
 
-      {error && <p style={{ color: 'red', marginBottom: '15px' }}>{error}</p>}
+      {error && <p className="message message-error">{error}</p>}
 
-      <div style={{ marginBottom: '30px', paddingBottom: '20px', borderBottom: '1px solid #ddd' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+      <div className="session-detail-header">
+        <div className="session-detail-heading">
           <div>
             {isEditing ? (
-              <input
-                type="text"
-                value={editTitle}
-                onChange={(e) => setEditTitle(e.target.value)}
-                style={{
-                  fontSize: '28px',
-                  fontWeight: 'bold',
-                  marginBottom: '10px',
-                  padding: '8px',
-                  border: '2px solid #2563eb',
-                  borderRadius: '4px',
-                  width: '100%',
-                }}
-              />
+              <div className="session-title-edit">
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  style={{
+                    fontSize: '28px',
+                    fontWeight: 'bold',
+                    padding: '8px',
+                    border: '2px solid #2563eb',
+                    borderRadius: '4px',
+                    width: '100%',
+                  }}
+                />
+                <input
+                  type="text"
+                  value={editSubject}
+                  onChange={(e) => setEditSubject(e.target.value)}
+                  placeholder="Subject"
+                />
+                <input
+                  type="date"
+                  value={editDueDate}
+                  onChange={(e) => setEditDueDate(e.target.value)}
+                />
+              </div>
             ) : (
-              <h1 style={{ margin: '0 0 10px 0' }}>{session.title}</h1>
+              <>
+                <h1 style={{ margin: '0 0 10px 0' }}>{session.title}</h1>
+                <div className="session-tag-row">
+                  {session.subject && <span className="subject-badge">{session.subject}</span>}
+                  {session.due_date && (
+                    <span className="due-date-badge">
+                      Due {formatDueDate(session.due_date)} · {getDueDateStatus(session.due_date)}
+                    </span>
+                  )}
+                </div>
+              </>
             )}
             <p style={{ color: '#999', fontSize: '14px', margin: 0 }}>
               📅 {formatDate(session.created_at)} | 🆔 #{session.id}
             </p>
           </div>
-        </div>
-      </div>
-
-      <div className="session-actions">
-        {!isEditing ? (
-          <>
-            <div className="action-panel">
-              <h3>Session</h3>
-              <div className="action-row">
-                <button className="btn btn-primary" onClick={() => setIsEditing(true)}>
+          <div className="session-header-actions">
+            {isEditing ? (
+              <>
+                <button className="btn btn-primary" onClick={handleSaveChanges} disabled={savingChanges}>
+                  {savingChanges ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditTitle(session.title);
+                    setEditSubject(session.subject || '');
+                    setEditDueDate(session.due_date ? session.due_date.slice(0, 10) : '');
+                    setEditText(session.original_text);
+                  }}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-secondary" onClick={() => setIsEditing(true)}>
                   Edit
                 </button>
                 <button className="btn btn-danger" onClick={handleDeleteSession}>
                   Delete
                 </button>
-              </div>
-            </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
 
-            <div className="action-panel action-panel-wide">
+      {!isEditing && (
+        <div className="session-actions">
+          <div className="action-panel action-panel-wide">
               <h3>AI Tools</h3>
               <div className="tool-grid">
                 <div className="tool-group">
                   <h4>Summary</h4>
                   <div className="action-row">
                     <button
-                      className="btn btn-green"
+                      className="btn btn-primary"
                       onClick={() => handleGenerateSummary('ko')}
                       disabled={generatingSummary}
                     >
                       {generatingSummary ? 'Generating...' : 'Korean'}
                     </button>
                     <button
-                      className="btn btn-teal"
+                      className="btn btn-secondary"
                       onClick={() => handleGenerateSummary('en')}
                       disabled={generatingSummary}
                     >
@@ -645,14 +1045,14 @@ export default function SessionDetail() {
                   <h4>Quiz</h4>
                   <div className="action-row">
                     <button
-                      className="btn btn-purple"
+                      className="btn btn-primary"
                       onClick={() => handleGenerateQuiz('ko')}
                       disabled={generatingQuiz}
                     >
                       {generatingQuiz ? 'Generating...' : 'Korean'}
                     </button>
                     <button
-                      className="btn btn-violet"
+                      className="btn btn-secondary"
                       onClick={() => handleGenerateQuiz('en')}
                       disabled={generatingQuiz}
                     >
@@ -665,14 +1065,14 @@ export default function SessionDetail() {
                   <h4>Flashcards</h4>
                   <div className="action-row">
                     <button
-                      className="btn btn-amber"
+                      className="btn btn-primary"
                       onClick={() => handleGenerateFlashcards('ko')}
                       disabled={generatingFlashcards}
                     >
                       {generatingFlashcards ? 'Generating...' : 'Korean'}
                     </button>
                     <button
-                      className="btn btn-orange"
+                      className="btn btn-secondary"
                       onClick={() => handleGenerateFlashcards('en')}
                       disabled={generatingFlashcards}
                     >
@@ -682,28 +1082,8 @@ export default function SessionDetail() {
                 </div>
               </div>
             </div>
-          </>
-        ) : (
-          <div className="action-panel">
-            <h3>Edit Session</h3>
-            <div className="action-row">
-              <button className="btn btn-green" onClick={handleSaveChanges} disabled={savingChanges}>
-                {savingChanges ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                className="btn btn-muted"
-                onClick={() => {
-                  setIsEditing(false);
-                  setEditTitle(session.title);
-                  setEditText(session.original_text);
-                }}
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="content-tabs">
         <button className={activeTab === 'text' ? 'tab-button tab-button-active' : 'tab-button'} onClick={() => setActiveTab('text')}>
@@ -720,9 +1100,21 @@ export default function SessionDetail() {
         </button>
       </div>
 
+      {renderAnnotationMenu()}
+
       {activeTab === 'text' && (
       <div style={{ marginBottom: '30px' }}>
-        <h3 style={{ marginBottom: '10px' }}>Original Text</h3>
+        <div className="original-text-header">
+          <div>
+            <h3>Original Text</h3>
+            <p className="subtle-text">Select text to highlight it or add a note.</p>
+          </div>
+          {annotations.filter((annotation) => (annotation.target || 'original_text') === 'original_text').length > 0 && (
+            <span className="annotation-count">
+              {annotations.filter((annotation) => (annotation.target || 'original_text') === 'original_text').length} annotations
+            </span>
+          )}
+        </div>
         {isEditing ? (
           <textarea
             value={editText}
@@ -738,18 +1130,25 @@ export default function SessionDetail() {
             }}
           />
         ) : (
-          <div
-            style={{
-              backgroundColor: '#f5f5f5',
-              padding: '15px',
-              borderRadius: '4px',
-              lineHeight: '1.6',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-word',
-            }}
-          >
-            {session.original_text}
-          </div>
+          <>
+            <div className="original-text-workspace">
+              <div
+                id="original-text-reader"
+                className="original-text-reader"
+                onMouseUp={() =>
+                  handleTextSelection('original-text-reader', session.original_text || '', 'original_text')
+                }
+                onKeyUp={() =>
+                  handleTextSelection('original-text-reader', session.original_text || '', 'original_text')
+                }
+              >
+                {renderAnnotatedText(session.original_text || '', 'original_text')}
+              </div>
+
+              {renderAnnotationSidePanel('original_text')}
+            </div>
+
+          </>
         )}
       </div>
       )}
@@ -764,10 +1163,10 @@ export default function SessionDetail() {
               <div
                 className="summary-panel"
                 style={{
-                  backgroundColor: '#f0f9ff',
+                  backgroundColor: '#ffffff',
                   padding: '15px',
-                  borderRadius: '4px',
-                  border: '1px solid #7dd3fc',
+                  borderRadius: '8px',
+                  border: '1px solid #dfe4ec',
                   lineHeight: '1.6',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
@@ -790,7 +1189,7 @@ export default function SessionDetail() {
                       rows="10"
                     />
                     <div className="action-row">
-                      <button className="btn btn-green" onClick={handleSaveSummary} disabled={savingChanges || !editSummaryText.trim()}>
+                      <button className="btn btn-primary" onClick={handleSaveSummary} disabled={savingChanges || !editSummaryText.trim()}>
                         {savingChanges ? 'Saving...' : 'Save'}
                       </button>
                       <button className="btn btn-muted" onClick={cancelEditingSummary}>
@@ -799,7 +1198,29 @@ export default function SessionDetail() {
                     </div>
                   </div>
                 ) : (
-                  session.summary_ko || session.summary
+                  <div className="summary-annotation-workspace">
+                    <div
+                      id="summary-ko-reader"
+                      className="summary-text-reader"
+                      onMouseUp={() =>
+                        handleTextSelection(
+                          'summary-ko-reader',
+                          session.summary_ko || session.summary || '',
+                          'summary_ko'
+                        )
+                      }
+                      onKeyUp={() =>
+                        handleTextSelection(
+                          'summary-ko-reader',
+                          session.summary_ko || session.summary || '',
+                          'summary_ko'
+                        )
+                      }
+                    >
+                      {renderAnnotatedText(session.summary_ko || session.summary || '', 'summary_ko')}
+                    </div>
+                    {renderAnnotationSidePanel('summary_ko')}
+                  </div>
                 )}
               </div>
             )}
@@ -807,10 +1228,10 @@ export default function SessionDetail() {
               <div
                 className="summary-panel"
                 style={{
-                  backgroundColor: '#f0fdf4',
+                  backgroundColor: '#ffffff',
                   padding: '15px',
-                  borderRadius: '4px',
-                  border: '1px solid #86efac',
+                  borderRadius: '8px',
+                  border: '1px solid #dfe4ec',
                   lineHeight: '1.6',
                   whiteSpace: 'pre-wrap',
                   wordBreak: 'break-word',
@@ -830,7 +1251,7 @@ export default function SessionDetail() {
                       rows="10"
                     />
                     <div className="action-row">
-                      <button className="btn btn-green" onClick={handleSaveSummary} disabled={savingChanges || !editSummaryText.trim()}>
+                      <button className="btn btn-primary" onClick={handleSaveSummary} disabled={savingChanges || !editSummaryText.trim()}>
                         {savingChanges ? 'Saving...' : 'Save'}
                       </button>
                       <button className="btn btn-muted" onClick={cancelEditingSummary}>
@@ -839,7 +1260,21 @@ export default function SessionDetail() {
                     </div>
                   </div>
                 ) : (
-                  session.summary_en
+                  <div className="summary-annotation-workspace">
+                    <div
+                      id="summary-en-reader"
+                      className="summary-text-reader"
+                      onMouseUp={() =>
+                        handleTextSelection('summary-en-reader', session.summary_en || '', 'summary_en')
+                      }
+                      onKeyUp={() =>
+                        handleTextSelection('summary-en-reader', session.summary_en || '', 'summary_en')
+                      }
+                    >
+                      {renderAnnotatedText(session.summary_en || '', 'summary_en')}
+                    </div>
+                    {renderAnnotationSidePanel('summary_en')}
+                  </div>
                 )}
               </div>
             )}
@@ -941,9 +1376,9 @@ export default function SessionDetail() {
             style={{
               marginTop: '20px',
               padding: '15px',
-              backgroundColor: '#f9fafb',
-              border: '1px solid #d1d5db',
-              borderRadius: '4px',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #dfe4ec',
+              borderRadius: '8px',
               display: 'grid',
               gap: '8px',
             }}
@@ -1052,17 +1487,10 @@ export default function SessionDetail() {
       )}
 
       <div style={{ textAlign: 'center', marginTop: '40px', paddingTop: '20px', borderTop: '1px solid #ddd' }}>
-        <button
-          onClick={() => navigate('/dashboard')}
-          style={{
-            padding: '10px 20px',
-            backgroundColor: '#f3f4f6',
-            color: '#374151',
-            border: '1px solid #d1d5db',
-            borderRadius: '4px',
-            cursor: 'pointer',
-          }}
-        >
+          <button
+            className="btn btn-secondary"
+            onClick={() => navigate('/dashboard')}
+          >
           Back to Dashboard
         </button>
       </div>
