@@ -22,6 +22,8 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-5.2
+      - key: GOOGLE_CLIENT_ID
+        sync: false
       - key: CLIENT_URL
         sync: false
       - key: AI_RATE_LIMIT_MAX

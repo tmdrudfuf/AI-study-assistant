@@ -1,9 +1,27 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { OAuth2Client } = require('google-auth-library');
 const db = require('../db');
 
 const router = express.Router();
+const googleClient = new OAuth2Client();
+
+function createAppToken(userId) {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured.');
+  }
+  return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '7d' });
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    created_at: user.created_at,
+  };
+}
 
 function authenticate(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -29,7 +47,8 @@ router.post('/signup', async (req, res) => {
   }
 
   try {
-    const existing = await db.query('SELECT id FROM users WHERE email = $1', [email]);
+    const normalizedEmail = email.trim().toLowerCase();
+    const existing = await db.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'Email already registered' });
     }
@@ -37,14 +56,11 @@ router.post('/signup', async (req, res) => {
     const password_hash = await bcrypt.hash(password, 10);
     const result = await db.query(
       'INSERT INTO users (name, email, password_hash) VALUES ($1, $2, $3) RETURNING id, name, email, created_at',
-      [name, email, password_hash]
+      [name.trim(), normalizedEmail, password_hash]
     );
 
     const user = result.rows[0];
-    if (!process.env.JWT_SECRET) {
-      throw new Error('JWT_SECRET is not configured. Set JWT_SECRET in server/.env.');
-    }
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+    const token = createAppToken(user.id);
 
     res.status(201).json({ user, token });
   } catch (error) {
@@ -60,25 +76,101 @@ router.post('/login', async (req, res) => {
   }
 
   try {
-    const result = await db.query('SELECT id, name, email, password_hash, created_at FROM users WHERE email = $1', [email]);
+    const normalizedEmail = email.trim().toLowerCase();
+    const result = await db.query(
+      'SELECT id, name, email, password_hash, created_at FROM users WHERE email = $1',
+      [normalizedEmail]
+    );
     if (result.rows.length === 0) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     const user = result.rows[0];
+    if (!user.password_hash) {
+      return res.status(401).json({
+        error: 'This account uses Google sign-in. Continue with Google instead.',
+      });
+    }
     const isValid = await bcrypt.compare(password, user.password_hash);
     if (!isValid) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    if (!process.env.JWT_SECRET) {
-      throw new Error('JWT_SECRET is not configured. Set JWT_SECRET in server/.env.');
-    }
-    const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.json({ user: { id: user.id, name: user.name, email: user.email, created_at: user.created_at }, token });
+    const token = createAppToken(user.id);
+    res.json({ user: publicUser(user), token });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+router.post('/google', async (req, res) => {
+  const { credential } = req.body;
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+
+  if (!credential) {
+    return res.status(400).json({ error: 'Google credential is required' });
+  }
+  if (!clientId) {
+    return res.status(503).json({ error: 'Google sign-in is not configured' });
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken: credential,
+      audience: clientId,
+    });
+    const payload = ticket.getPayload();
+
+    if (!payload?.sub || !payload.email || !payload.email_verified) {
+      return res.status(401).json({ error: 'Google account could not be verified' });
+    }
+
+    const email = payload.email.trim().toLowerCase();
+    const name = payload.name?.trim() || email.split('@')[0];
+
+    let result = await db.query(
+      'SELECT id, name, email, google_id, created_at FROM users WHERE google_id = $1',
+      [payload.sub]
+    );
+    if (result.rows.length === 0) {
+      result = await db.query(
+        'SELECT id, name, email, google_id, created_at FROM users WHERE email = $1',
+        [email]
+      );
+    }
+
+    let user;
+    if (result.rows.length > 0) {
+      const existingUser = result.rows[0];
+      if (existingUser.google_id && existingUser.google_id !== payload.sub) {
+        return res.status(409).json({ error: 'This email is linked to another Google account' });
+      }
+
+      result = await db.query(
+        `UPDATE users
+         SET google_id = $1,
+             name = CASE WHEN name IS NULL OR name = '' THEN $2 ELSE name END
+         WHERE id = $3
+         RETURNING id, name, email, created_at`,
+        [payload.sub, name, existingUser.id]
+      );
+      user = result.rows[0];
+    } else {
+      result = await db.query(
+        `INSERT INTO users (name, email, password_hash, google_id)
+         VALUES ($1, $2, NULL, $3)
+         RETURNING id, name, email, created_at`,
+        [name, email, payload.sub]
+      );
+      user = result.rows[0];
+    }
+
+    const token = createAppToken(user.id);
+    res.json({ user: publicUser(user), token });
+  } catch (error) {
+    console.error('Google sign-in failed:', error.message || error);
+    res.status(401).json({ error: 'Google sign-in failed' });
   }
 });
 

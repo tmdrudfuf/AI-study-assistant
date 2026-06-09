@@ -12,6 +12,7 @@ Push the current `main` branch to GitHub.
 4. Render will detect the root `render.yaml`.
 5. Enter the requested secret values:
    - `OPENAI_API_KEY`: your OpenAI API key
+   - `GOOGLE_CLIENT_ID`: your Google OAuth Web Client ID
    - `CLIENT_URL`: enter a temporary value such as `https://example.com`
 6. Create the Blueprint.
 7. Copy the deployed API URL, for example:
@@ -28,6 +29,7 @@ The server runs database migrations automatically when it starts.
    - Output directory: `dist`
 4. Add this environment variable:
    - `VITE_API_URL=https://your-render-api.onrender.com`
+   - `VITE_GOOGLE_CLIENT_ID=your-google-web-client-id.apps.googleusercontent.com`
 5. Deploy and copy the Vercel production URL.
 
 ## 4. Finish the connection
