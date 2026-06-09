@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: ai-study-assistant-api
+    runtime: node
+    plan: free
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ai-study-assistant-db
+          property: connectionString
+      - key: DB_SSL
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5.2
+      - key: CLIENT_URL
+        sync: false
+      - key: AI_RATE_LIMIT_MAX
+        value: "20"
+      - key: AI_RATE_LIMIT_WINDOW_MS
+        value: "3600000"
+      - key: AI_MAX_INPUT_CHARS
+        value: "50000"
+
+databases:
+  - name: ai-study-assistant-db
+    plan: free
+    databaseName: ai_study_assistant
+    user: ai_study_assistant
